@@ -28,7 +28,7 @@
 ******************************************************************/
 
 #include <Servo.h>
- 
+
 // Servo control for a modified AL5D arm
 // Modifications entail lengthened arm segments
  
@@ -63,11 +63,6 @@ Servo	Gri_Servo;
  
 void setup()
 {
-#ifdef DEBUG
-	Serial.begin( 115200 );
-	Serial.println("Start");
-#endif
-
 	Bas_Servo.attach(BAS_SERVO_PIN);
 	Shl_Servo.attach(SHL_SERVO_PIN);
 	Elb_Servo.attach(ELB_SERVO_PIN);
@@ -76,14 +71,17 @@ void setup()
 //	Wro_Servo.attach(WRO_SERVO_PIN);
 
 	servo_park();
+	Serial.begin(115200);
+	Serial.println("Start");
 	delay(500);
 }
  
 void loop()
 {
+
   //zero_x();
-  //line();
-  circle();
+  line();
+  //circle();
  }
  
 // Arm positioning routine utilizing inverse kinematics
@@ -132,20 +130,21 @@ void set_arm(float x, float y, float z, float grip_angle_d)
 	float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
   	// Servo output
-  	Bas_Servo.write(degrees(bas_angle_r));
-	Shl_Servo.write(shl_angle_d - 90.0);
-	Elb_Servo.write(elb_angle_d - 90.0);
-	Wri_Servo.write(wri_angle_d); 
+  	Bas_Servo.write(90 - degrees(bas_angle_r));
+	Shl_Servo.write(90 + (shl_angle_d - 90.0));
+	Elb_Servo.write(90 - (elb_angle_d - 90.0));
+	Wri_Servo.write(90 + wri_angle_d); 
 }
  
-// Move servos to parking position - their midpoints
+// Move servos to parking position
 void servo_park()
 {
-  	Bas_Servo.write(90);
-	Shl_Servo.write(90);
-	Elb_Servo.write(90);
-	Wri_Servo.write(90; 
-//	Wro_Servo.attach(90);
+  	Bas_Servo.write(103);
+	Shl_Servo.write(126);
+	Elb_Servo.write(126);
+	Wri_Servo.write(108);
+	Gri_Servo.write(54);
+//	Wro_Servo.write(36);
 
 	return;
 }
@@ -163,7 +162,7 @@ void zero_x()
 	}
 }
  
-/* moves arm in a straight line */
+// Moves arm in a straight line
 void line()
 {
 	for (double xaxis = -100.0; xaxis < 100.0; xaxis += 0.5) {
@@ -180,13 +179,13 @@ void line()
 void circle()
 {
 	#define RADIUS 80.0
-	//float angle = 0;
 	float zaxis, yaxis;
 
 	for (float angle = 0.0; angle < 360.0; angle += 1.0) {
-    	yaxis = RADIUS * sin(radians(angle)) + 200;
-    	zaxis = RADIUS * cos(radians(angle)) + 200;
-    	set_arm(0, yaxis, zaxis, 0);
-    	delay(1);
+		yaxis = RADIUS * sin(radians(angle)) + 300;
+		zaxis = RADIUS * cos(radians(angle)) + 300;
+		set_arm(0, yaxis, zaxis, 0);
+		delay(5);
 	}
 }
+
