@@ -46,15 +46,12 @@
 
 //#define DEBUG				// Uncomment to turn on debugging output
 //#define WRIST_ROTATE		// Uncomment if wrist rotate hardware is installed
-
-// Servo control for a modified AL5D arm
-// Modifications entail lengthened arm segments
  
-// Arm dimensions (mm)
-#define BASE_HGT 67.31      //base height 2.65"
-#define HUMERUS 260.35      //shoulder-to-elbow "bone" 10.25"
-#define ULNA 327.025        //elbow-to-wrist "bone" 12.875"
-#define GRIPPER 85.725      //gripper length 3.375"
+// Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
+#define BASE_HGT 67.31      // Base height 2.65"
+#define HUMERUS 260.35      // Shoulder-to-elbow "bone" 10.25"
+#define ULNA 327.025        // Elbow-to-wrist "bone" 12.875"
+#define GRIPPER 85.725      // Gripper length 3.375"
  
 // Arduino pin numbers for servo connections
 #define BAS_SERVO_PIN 2		// Base servo HS-485HB
@@ -86,11 +83,11 @@
 #define GRI_MAX 180
 #endif
 
-// Define pin numbers for PS2 controller connections
-#define PS2_CLK 9
-#define PS2_CMD 7
-#define PS2_ATT 8
-#define PS2_DAT 6
+// Arduino pin numbers for PS2 controller connections
+#define PS2_CLK 9			// Clock
+#define PS2_CMD 7			// Command
+#define PS2_ATT 8			// Attention
+#define PS2_DAT 6			// Data
 
 // Joystick characteristics
 #define JS_MIDPOINT 128		// Numeric value for joystick midpoint
@@ -117,11 +114,11 @@ Servo	Gri_Servo;
 Servo	Wro_Servo;
 #endif
 
-// Global values for arm position
-float X = 0				// mm - left/right from base centerline. 0 = straight
-float Y = 100			// mm - away (out) from base center
-float Z = 100			// mm - up from surface
-float Grip_Angle = 90;	// degrees - wrist angle. 90 = horizontal
+// Global values for arm position, and initial settings
+float X = 0				// Left/right from base centerline, in mm. 0 = straight
+float Y = 100			// Away (out) from base center, in mm
+float Z = 100			// Up from surface, in mm
+float Grip_Angle = 90;	// Wrist angle, in degrees. 90 = horizontal
  
 void setup()
 {
@@ -131,7 +128,7 @@ void setup()
 
 	// Setup PS2 controller pins and settings and check for error
 	// 	GamePad(clock, command, attention, data, Pressures?, Rumble?)
-	ps2_stat = Ps2x.config_gamepad(PS2_CLK,PS2_CMD,PS2_ATT,PS2_DAT, true, true);
+	ps2_stat = Ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_ATT, PS2_DAT, true, true);
  
 #ifdef DEBUG
 	if (ps2_stat == 0)
@@ -168,10 +165,10 @@ void setup()
 void loop()
 {
 
-	if (ps2_stat == 1) //skip loop if no controller found
+	if (ps2_stat == 1)			//skip loop if no controller found
 		return; 
 
-	Ps2x.read_gamepad();          //read controller
+	Ps2x.read_gamepad();		//read controller
 
 	// Read the left and right joysticks and translate the 
 	// normal range of values (0-255) to zero-centered values (-128 - 128)
@@ -252,7 +249,7 @@ void set_arm(float x, float y, float z, float grip_angle_d)
 	// wrist angle
 	float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
- 	// Calculate and constrain servo positions
+ 	// Calculate servo angles and constrain servo positions
 	float bas_pos = constrain(SERVO_MIDPOINT - degrees(bas_angle_r), BAS_MIN, BAS_MAX);
  	float shl_pos = constrain(SERVO_MIDPOINT + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
 	float elb_pos = constrain(SERVO_MIDPOINT - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
