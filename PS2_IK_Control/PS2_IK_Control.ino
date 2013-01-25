@@ -1,14 +1,22 @@
 /******************************************************************
-*  Inverse Kinematics code to control a (modified) 
-*  LynxMotion AL5D robot arm using a PS2 controller.
+*	Inverse Kinematics code to control a (modified) 
+*	LynxMotion AL5D robot arm using a PS2 controller.
 *
-*    Original IK code by Oleg Mazurov
-*    http://www.circuitsathome.com/mcu/robotic-arm-inverse-kinematics-on-arduino
+*	Original IK code by Oleg Mazurov:
+*		www.circuitsathome.com/mcu/robotic-arm-inverse-kinematics-on-arduino
 *
-*    Revamped to use BotBoarduino microcontroller, Arduino Servo library
-*	 and PS2X controller library:
-*              Eric Goldsmith
-*              www.ericgoldsmith.com
+*	Great intro to IK, with illustrations:
+*		github.com/EricGoldsmith/AL5D-BotBoarduino-PS2/blob/master/Robot_Arm_IK.pdf
+*
+*	Revamped to use BotBoarduino microcontroller:
+*		www.lynxmotion.com/c-153-botboarduino.aspx
+*	Arduino Servo library:
+*		arduino.cc/en/Reference/Servo
+*	and PS2X controller library:
+*		github.com/madsci1016/Arduino-PS2X
+*
+*	Eric Goldsmith
+*	www.ericgoldsmith.com
 *
 *
 *  Version history
@@ -29,6 +37,9 @@
 
 #include <Servo.h>
 
+//#define DEBUG				// Uncomment to turn on debugging output
+//#define WRIST_ROTATE		// Uncomment if wrist rotate hardware is installed
+
 // Servo control for a modified AL5D arm
 // Modifications entail lengthened arm segments
  
@@ -37,17 +48,36 @@
 #define HUMERUS 260.35      //shoulder-to-elbow "bone" 10.25"
 #define ULNA 327.025        //elbow-to-wrist "bone" 12.875"
 #define GRIPPER 85.725      //gripper length 3.375"
-
-//float to long conversion 
-#define ftl(x) ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))  
  
-// Servo pin numbers
+// Arduino pin numbers for server connections
 #define BAS_SERVO_PIN 2		// Base servo HS-485HB
 #define SHL_SERVO_PIN 3		// Shoulder Servo HS-805HB
 #define ELB_SERVO_PIN 4		// Elbow Servo HS-755HB
 #define WRI_SERVO_PIN 10	// Wrist servo HS-645MG
 #define GRI_SERVO_PIN 11	// Gripper servo HS-422
-//#define WRO_SERVO_PIN 12	// Wrist rotate servo HS-485HB
+
+#ifdef WRIST_ROTATE
+#define WRO_SERVO_PIN 12	// Wrist rotate servo HS-485HB
+#endif
+
+#define SERVO_MIDPOINT 90	// 90 degrees is the rotation midpoint of each servo
+
+// Set boundary constraints (in degrees) per servo
+#define BAS_MIN 0
+#define BAS_MAX 180
+#define SHL_MIN 5 
+#define SHL_MAX 155
+#define ELB_MIN 15
+#define ELB_MAX 180
+#define WRI_MIN 0
+#define WRI_MAX 180
+#define GRI_MIN 0
+#define GRI_MAX 180
+
+#ifdef WRIST_ROTATE
+#define GRI_MIN 0
+#define GRI_MAX 180
+#endif
  
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -59,20 +89,30 @@ Servo	Shl_Servo;
 Servo	Elb_Servo;
 Servo	Wri_Servo;
 Servo	Gri_Servo;
-//Servo	Wro_Servo;
+
+#ifdef WRIST_ROTATE
+Servo	Wro_Servo;
+#endif
  
 void setup()
 {
+#ifdef DEBUG
+	Serial.begin(115200);
+#endif
+
 	Bas_Servo.attach(BAS_SERVO_PIN);
 	Shl_Servo.attach(SHL_SERVO_PIN);
 	Elb_Servo.attach(ELB_SERVO_PIN);
 	Wri_Servo.attach(WRI_SERVO_PIN);
 	Gri_Servo.attach(GRI_SERVO_PIN);
-//	Wro_Servo.attach(WRO_SERVO_PIN);
+#ifdef WRIST_ROTATE
+	Wro_Servo.attach(WRO_SERVO_PIN);
+#endif
 
 	servo_park();
-	Serial.begin(115200);
+#ifdef DEBUG
 	Serial.println("Start");
+#endif
 	delay(500);
 }
  
@@ -129,22 +169,30 @@ void set_arm(float x, float y, float z, float grip_angle_d)
 	// wrist angle
 	float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
+ 	// Calculate and constrain servo positions
+	float bas_pos = constrain(SERVO_MIDPOINT - degrees(bas_angle_r), BAS_MIN, BAS_MAX);
+ 	float shl_pos = constrain(SERVO_MIDPOINT + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
+	float elb_pos = constrain(SERVO_MIDPOINT - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
+	float wri_pos = constrain(SERVO_MIDPOINT + wri_angle_d, WRI_MIN, WRI_MAX);
+ 
   	// Servo output
-  	Bas_Servo.write(90 - degrees(bas_angle_r));
-	Shl_Servo.write(90 + (shl_angle_d - 90.0));
-	Elb_Servo.write(90 - (elb_angle_d - 90.0));
-	Wri_Servo.write(90 + wri_angle_d); 
+  	Bas_Servo.write(bas_pos);
+	Shl_Servo.write(shl_pos);
+	Elb_Servo.write(elb_pos);
+	Wri_Servo.write(wri_pos); 
 }
  
 // Move servos to parking position
 void servo_park()
 {
-  	Bas_Servo.write(103);
-	Shl_Servo.write(126);
-	Elb_Servo.write(126);
-	Wri_Servo.write(108);
-	Gri_Servo.write(54);
-//	Wro_Servo.write(36);
+  	Bas_Servo.write(SERVO_MIDPOINT);
+	Shl_Servo.write(SERVO_MIDPOINT);
+	Elb_Servo.write(SERVO_MIDPOINT);
+	Wri_Servo.write(SERVO_MIDPOINT);
+	Gri_Servo.write(SERVO_MIDPOINT);
+#ifdef WRIST_ROTATE
+	Wro_Servo.write(SERVO_MIDPOINT);
+#endif
 
 	return;
 }
