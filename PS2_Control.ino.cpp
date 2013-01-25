@@ -5,7 +5,8 @@
 *    Original IK code by Oleg Mazurov
 *    http://www.circuitsathome.com/mcu/robotic-arm-inverse-kinematics-on-arduino
 *
-*    Revamped to use Arduino Servo library and PS2X controller library:
+*    Revamped to use BotBoarduino microcontroller, Arduino Servo library
+*	 and PS2X controller library:
 *              Eric Goldsmith
 *              www.ericgoldsmith.com
 *
@@ -41,18 +42,12 @@
 #define ftl(x) ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))  
  
 // Servo pin numbers
-// Base servo HS-485HB
-#define BAS_SERVO_PIN 2
-// Shoulder Servo HS-805HB
-#define SHL_SERVO_PIN 3
-// Elbow Servo HS-755HB
-#define ELB_SERVO_PIN 4
-// Wrist servo HS-645MG
-#define WRI_SERVO_PIN 10
-// Gripper servo HS-422
-#define GRI_SERVO_PIN 11
-// Wrist rotate servo HS-485HB
-//#define WRO_SERVO_PIN 12
+#define BAS_SERVO_PIN 2		// Base servo HS-485HB
+#define SHL_SERVO_PIN 3		// Shoulder Servo HS-805HB
+#define ELB_SERVO_PIN 4		// Elbow Servo HS-755HB
+#define WRI_SERVO_PIN 10	// Wrist servo HS-645MG
+#define GRI_SERVO_PIN 11	// Gripper servo HS-422
+//#define WRO_SERVO_PIN 12	// Wrist rotate servo HS-485HB
  
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
