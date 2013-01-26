@@ -44,7 +44,7 @@
 #include <Servo.h>
 #include <PS2X_lib.h>
 
-//#define DEBUG             // Uncomment to turn on debugging output
+#define DEBUG             // Uncomment to turn on debugging output
 //#define WRIST_ROTATE      // Uncomment if wrist rotate hardware is installed
 
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
@@ -64,23 +64,23 @@
 #define WRO_SERVO_PIN 12    // Wrist rotate servo HS-485HB
 #endif
 
-#define SERVO_MIDPOINT 90   // 90 degrees is the rotation midpoint of each servo
+#define SERVO_MIDPOINT 90.0 // 90 degrees is the rotation midpoint of each servo
 
 // Set physical limits (in degrees) per servo
-#define BAS_MIN 0
-#define BAS_MAX 180
-#define SHL_MIN 5 
-#define SHL_MAX 155
-#define ELB_MIN 15
-#define ELB_MAX 155
-#define WRI_MIN 0
-#define WRI_MAX 180
-#define GRI_MIN 0
-#define GRI_MAX 180
+#define BAS_MIN 0.0
+#define BAS_MAX 180.0
+#define SHL_MIN 5.0 
+#define SHL_MAX 155.0
+#define ELB_MIN 15.0
+#define ELB_MAX 155.0
+#define WRI_MIN 0.0
+#define WRI_MAX 180.0
+#define GRI_MIN 0.0
+#define GRI_MAX 180.0
 
 #ifdef WRIST_ROTATE
-#define GRI_MIN 0
-#define GRI_MAX 180
+#define GRI_MIN 0.0
+#define GRI_MAX 180.0
 #endif
 
 // Arduino pin numbers for PS2 controller connections
@@ -92,8 +92,8 @@
 // Joystick characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
 #define JS_DEADBAND 4       // Ignore movement this close to the center position
-#define JS_SCALE_FACTOR 100 // Divisor for scaling JS output
-#define Z_INCREMENT 1       // Change in Z axis per button press
+#define JS_SCALE_FACTOR 100.0 // Divisor for scaling JS output
+#define Z_INCREMENT 1.0       // Change in Z axis per button press
  
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -101,7 +101,6 @@ float uln_sq = ULNA*ULNA;
 
 // PS2 Controller object
 PS2X    Ps2x;
-byte    ps2_stat;
 
 // Servo objects 
 Servo   Bas_Servo;
@@ -128,14 +127,18 @@ void setup()
 
     // Setup PS2 controller pins and settings and check for error
     //  GamePad(clock, command, attention, data, Pressures?, Rumble?)
-    ps2_stat = Ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_ATT, PS2_DAT, true, true);
+    byte    ps2_stat;
+    do {
+        ps2_stat = Ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_ATT, PS2_DAT, true, true);
+#ifdef DEBUG
+        if (ps2_stat == 1)
+            Serial.println("No controller found. Re-trying ...");
+#endif
+    } while (ps2_stat == 1);
  
 #ifdef DEBUG
     if (ps2_stat == 0)
         Serial.println("Found Controller, configured successfully.");
-
-    else if (ps2_stat == 1)
-        Serial.println("No controller found.");
 
     else if (ps2_stat == 2)
         Serial.println("Controller found but not accepting commands.");
@@ -165,13 +168,10 @@ void setup()
  
 void loop()
 {
-    if (ps2_stat == 1)          //skip loop if no controller found
-        return;
-
     // Store desired position in tmp variables until confirmed by set_arm() logic
-    int x_tmp = X;
-    int y_tmp = Y;
-    int z_tmp = Z;
+    float x_tmp = X;
+    float y_tmp = Y;
+    float z_tmp = Z;
 
     Ps2x.read_gamepad();        //read controller
 
@@ -269,10 +269,10 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
     // Calculate servo angles and constrain servo positions
-    int bas_pos = constrain(SERVO_MIDPOINT - degrees(bas_angle_r), BAS_MIN, BAS_MAX);
-    int shl_pos = constrain(SERVO_MIDPOINT + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
-    int elb_pos = constrain(SERVO_MIDPOINT - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
-    int wri_pos = constrain(SERVO_MIDPOINT + wri_angle_d, WRI_MIN, WRI_MAX);
+    float bas_pos = constrain(SERVO_MIDPOINT + degrees(bas_angle_r), BAS_MIN, BAS_MAX);
+    float shl_pos = constrain(SERVO_MIDPOINT + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
+    float elb_pos = constrain(SERVO_MIDPOINT - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
+    float wri_pos = constrain(SERVO_MIDPOINT + wri_angle_d, WRI_MIN, WRI_MAX);
  
     // Servo output
     Bas_Servo.write(bas_pos);
@@ -298,10 +298,12 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     Serial.print(elb_pos);
     Serial.print("  Wrst Pos: ");
     Serial.println(wri_pos);
-    Serial.print("shl_angle_r: ");
-    Serial.print(shl_angle_r);  
-    Serial.print("  elb_angle_r: ");
-    Serial.println(elb_angle_r);
+    Serial.print("bas_angle_d: ");
+    Serial.print(degrees(bas_angle_r));  
+    Serial.print("  shl_angle_d: ");
+    Serial.print(shl_angle_d);  
+    Serial.print("  elb_angle_d: ");
+    Serial.println(elb_angle_d);
     Serial.println();
 #endif
 
@@ -363,6 +365,7 @@ void circle()
         yaxis = RADIUS * sin(radians(angle)) + 300;
         zaxis = RADIUS * cos(radians(angle)) + 300;
         set_arm(0, yaxis, zaxis, 0);
-        delay(5);
+        delay(10);
     }
 }
+
