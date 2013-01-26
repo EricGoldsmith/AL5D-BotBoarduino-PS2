@@ -18,8 +18,11 @@
 *   PS2 Controls
 *       Right Joystick L/R: Gripper tip X position (side to side)
 *       Right Joystick U/D: Gripper tip Y position (distance out from base center)
-*       R1/R2 buttons:      Gripper tip Z position (height from surface)
+*       R1/R2 Buttons:      Gripper tip Z position (height from surface)
+*       Left Joystick L/R   Wrist Rotate (if installed)
 *       Left Joystick U/D:  Wrist angle
+*       L1/L2 Buttons:      Gripper close/open
+*       X:                  Gripper fully open
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -47,14 +50,14 @@
 #include <Servo.h>
 #include <PS2X_lib.h>
 
-#define DEBUG             // Uncomment to turn on debugging output
+//#define DEBUG             // Uncomment to turn on debugging output
 //#define WRIST_ROTATE      // Uncomment if wrist rotate hardware is installed
 
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
-#define BASE_HGT 67.31      // Base height 2.65"
-#define HUMERUS 260.35      // Shoulder-to-elbow "bone" 10.25"
-#define ULNA 327.025        // Elbow-to-wrist "bone" 12.875"
-#define GRIPPER 85.725      // Gripper length 3.375"
+#define BASE_HGT 80.975     // Base height 3.188"
+#define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
+#define ULNA 325.450        // Elbow-to-wrist "bone" 12.813"
+#define GRIPPER 79.375      // Gripper length 3.125"
 
 // Arduino pin numbers for servo connections
 #define BAS_SERVO_PIN 2     // Base servo HS-485HB
@@ -72,17 +75,16 @@
 #define BAS_MIN 0.0
 #define BAS_MAX 180.0
 #define SHL_MIN 5.0 
-#define SHL_MAX 155.0
+#define SHL_MAX 140.0
 #define ELB_MIN 15.0
 #define ELB_MAX 155.0
 #define WRI_MIN 0.0
 #define WRI_MAX 180.0
-#define GRI_MIN 0.0
-#define GRI_MAX 180.0
-
+#define GRI_MIN 25.0        // Fully open
+#define GRI_MAX 165.0       // Fully closed
 #ifdef WRIST_ROTATE
-#define GRI_MIN 0.0
-#define GRI_MAX 180.0
+#define WRO_MIN 0.0
+#define WRO_MAX 180.0
 #endif
 
 // Arduino pin numbers for PS2 controller connections
@@ -95,7 +97,8 @@
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
 #define JS_DEADBAND 4       // Ignore movement this close to the center position
 #define JS_SCALE_FACTOR 100.0 // Divisor for scaling JS output
-#define Z_INCREMENT 1.0       // Change in Z axis per button press
+#define Z_INCREMENT 1.0     // Change in Z axis per button press
+#define G_INCREMENT 2.0     // Change in Gripper position per button press
  
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -115,20 +118,29 @@ Servo   Wro_Servo;
 #endif
 
 // Park positions
-#define PARK_MIDPOINT 1 // Servos at midpoints
-#define PARK_READY      // Servos at Ready To Run positions
+#define PARK_MIDPOINT 1     // Servos at midpoints
+#define PARK_READY 2        // Servos at Ready To Run positions
 
 // Ready To Run arm position
-#define READY_X 0.0;    // Left/right from base centerline, in mm. 0 = straight
-#define READY_Y 200.0;  // Away (out) from base center, in mm
-#define READY_Z 200.0;  // Up from surface, in mm
-#define READY_GA 0.0    // Wrist angle, in degrees. 0 = horizontal
+#define READY_X 0.0
+#define READY_Y 200.0
+#define READY_Z 200.0
+#define READY_GA 0.0
+#define READY_G SERVO_MIDPOINT
+#ifdef  WRIST_ROTATE
+#define READY_WR SERVO_MIDPOINT
+#endif
 
 // Global variables for arm position, and initial settings
-float X = READY_X;
-float Y = READY_Y;
-float Z = READY_Z;
-float Grip_Angle = READY_GA;
+float X = READY_X;          // Left/right from base centerline, in mm. 0 = straight
+float Y = READY_Y;          // Away (out) from base center, in mm
+float Z = READY_Z;          // Up from surface, in mm
+float GA = READY_GA;        // Gripper angle, in degrees. 0 = horizontal
+float G = READY_G;          // Gripper jaw opening. 90 degrees is mid-way open
+#ifdef  WRIST_ROTATE
+float WR = READY_WR;        // Wrist Rotate. 90 degrees is horizontal
+#endif
+
  
 void setup()
 {
@@ -172,7 +184,7 @@ void setup()
 #endif
 
     servo_park(PARK_READY);
-    
+
 #ifdef DEBUG
     Serial.println("Start");
 #endif
@@ -186,6 +198,10 @@ void loop()
     float x_tmp = X;
     float y_tmp = Y;
     float z_tmp = Z;
+    float ga_tmp = GA;
+    
+    // Used to indidate whether an input occurred that can move the arm
+    boolean arm_move = false;
 
     Ps2x.read_gamepad();        //read controller
 
@@ -196,19 +212,22 @@ void loop()
     int ry_trans = JS_MIDPOINT - Ps2x.Analog(PSS_RY);
     int rx_trans = Ps2x.Analog(PSS_RX) - JS_MIDPOINT;
 
-    // X Position
+    // X Position (in mm)
     // Can be positive or negative, so no range checks needed
-    if (abs(rx_trans) > JS_DEADBAND)
+    if (abs(rx_trans) > JS_DEADBAND) {
         x_tmp += (rx_trans / JS_SCALE_FACTOR);
+        arm_move = true;
+    }
 
-    // Y Position
+    // Y Position (in mm)
     // Can only be positive, so enforce lower bound
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += (ry_trans / JS_SCALE_FACTOR);
         y_tmp = max(y_tmp, 0);
+        arm_move = true;
     }
 
-    // Z Position
+    // Z Position (in mm)
     // Can only be positive, so enforce lower bound
     if (Ps2x.Button(PSB_R1) || Ps2x.Button(PSB_R2)) {
         if (Ps2x.Button(PSB_R1))
@@ -217,14 +236,60 @@ void loop()
             z_tmp -= Z_INCREMENT;   // down
             z_tmp = max(z_tmp, 0);
         }
+        arm_move = true;
+    }
+
+    // Grip angle (in degrees)
+    // Can be positive or negative, so no range checks needed
+    if (abs(ly_trans) > JS_DEADBAND) {
+        ga_tmp += (ly_trans / JS_SCALE_FACTOR);
+        arm_move = true;
+    }
+
+    // Gripper jaw position (in degrees - determines width of jaw opening)
+    // Restrict to MIN/MAX range of servo
+    if (Ps2x.Button(PSB_L1) || Ps2x.Button(PSB_L2)) {
+        if (Ps2x.Button(PSB_L1))
+            G += G_INCREMENT;   // close
+        else
+            G -= G_INCREMENT;   // open
+
+        G = constrain(G, GRI_MIN, GRI_MAX);
+        Gri_Servo.write(G);
+#ifdef DEBUG
+        Serial.print("G: ");
+        Serial.println(G);
+#endif
+    }
+
+    // Fully open gripper
+    if (Ps2x.Button(PSB_BLUE)) {
+        G = GRI_MIN;
+        Gri_Servo.write(G);
     }
     
-    // If the arm was positioned successfully, record
-    // the new vales. Otherwise, ignore them.
-    if (set_arm(x_tmp, y_tmp, z_tmp, Grip_Angle) == 0) {
-        X = x_tmp;
-        Y = y_tmp;
-        Z = z_tmp;
+#ifdef WRIST_ROTATE
+    // Wrist rotate (in degrees)
+    // Restrict to MIN/MAX range of servo
+    if (abs(lx_trans) > JS_DEADBAND) {
+        WR += (lx_trans / JS_SCALE_FACTOR);
+        WR = constrain(WR, WRO_MIN, WRO_MAX);
+        Wro_Servo.write(WR);
+    }
+#endif
+
+    // Only call this if arm motion is needed.
+    if (arm_move) {
+        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == 0) {
+            // If the arm was positioned successfully, record
+            // the new vales. Otherwise, ignore them.
+            X = x_tmp;
+            Y = y_tmp;
+            Z = z_tmp;
+            GA = ga_tmp;
+        }
+        // Reset the flag
+        arm_move = false;
     }
 
     delay(10);
@@ -340,55 +405,14 @@ void servo_park(int park_type)
             break;
         
         // Ready To Run position
-        case PARK_READY
+        case PARK_READY:
             set_arm(READY_X, READY_Y, READY_Z, READY_GA);
-            Gri_Servo.write(SERVO_MIDPOINT);
+            Gri_Servo.write(READY_G);
 #ifdef WRIST_ROTATE
-            Wro_Servo.write(SERVO_MIDPOINT);
+            Wro_Servo.write(READY_WR);
 #endif
             break;
     }
 
     return;
 }
- 
-void zero_x()
-{
-    for (double yaxis = 150.0; yaxis < 356.0; yaxis += 1) {
-        set_arm(0, yaxis, 127.0, 0);
-        delay(10);
-    }
-    
-    for (double yaxis = 356.0; yaxis > 150.0; yaxis -= 1) {
-        set_arm(0, yaxis, 127.0, 0);
-        delay(10);
-    }
-}
- 
-// Moves arm in a straight line
-void line()
-{
-    for (double xaxis = -100.0; xaxis < 100.0; xaxis += 0.5) {
-        set_arm(xaxis, 250, 100, 0);
-        delay(10);
-    }
-    
-    for (float xaxis = 100.0; xaxis > -100.0; xaxis -= 0.5) {
-        set_arm(xaxis, 250, 100, 0);
-        delay(10);
-    }
-}
- 
-void circle()
-{
-    #define RADIUS 80.0
-    float zaxis, yaxis;
-
-    for (float angle = 0.0; angle < 360.0; angle += 1.0) {
-        yaxis = RADIUS * sin(radians(angle)) + 300;
-        zaxis = RADIUS * cos(radians(angle)) + 300;
-        set_arm(0, yaxis, zaxis, 0);
-        delay(10);
-    }
-}
-
