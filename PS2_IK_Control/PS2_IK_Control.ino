@@ -29,6 +29,9 @@
 *
 *       0.2 Added PS2 controls
 *
+*   Current Version:
+*       https://github.com/EricGoldsmith/AL5D-BotBoarduino-PS2
+*
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
 * the Free Software Foundation, either version 3 of the License, or
@@ -59,7 +62,6 @@
 #define ELB_SERVO_PIN 4     // Elbow Servo HS-755HB
 #define WRI_SERVO_PIN 10    // Wrist servo HS-645MG
 #define GRI_SERVO_PIN 11    // Gripper servo HS-422
-
 #ifdef WRIST_ROTATE
 #define WRO_SERVO_PIN 12    // Wrist rotate servo HS-485HB
 #endif
@@ -108,16 +110,25 @@ Servo   Shl_Servo;
 Servo   Elb_Servo;
 Servo   Wri_Servo;
 Servo   Gri_Servo;
-
 #ifdef WRIST_ROTATE
 Servo   Wro_Servo;
 #endif
 
+// Park positions
+#define PARK_MIDPOINT 1 // Servos at midpoints
+#define PARK_READY      // Servos at Ready To Run positions
+
+// Ready To Run arm position
+#define READY_X 0.0;    // Left/right from base centerline, in mm. 0 = straight
+#define READY_Y 200.0;  // Away (out) from base center, in mm
+#define READY_Z 200.0;  // Up from surface, in mm
+#define READY_GA 0.0    // Wrist angle, in degrees. 0 = horizontal
+
 // Global variables for arm position, and initial settings
-float X = 0;            // Left/right from base centerline, in mm. 0 = straight
-float Y = 200;          // Away (out) from base center, in mm
-float Z = 200;          // Up from surface, in mm
-float Grip_Angle = 0;   // Wrist angle, in degrees. 0 = horizontal
+float X = READY_X;
+float Y = READY_Y;
+float Z = READY_Z;
+float Grip_Angle = READY_GA;
  
 void setup()
 {
@@ -137,14 +148,17 @@ void setup()
     } while (ps2_stat == 1);
  
 #ifdef DEBUG
-    if (ps2_stat == 0)
-        Serial.println("Found Controller, configured successfully.");
-
-    else if (ps2_stat == 2)
-        Serial.println("Controller found but not accepting commands.");
-
-    else if (ps2_stat == 3)
-        Serial.println("Controller refusing to enter 'Pressures' mode, may not support it. ");      
+    switch (ps2_stat) {
+        case 0:
+            Serial.println("Found Controller, configured successfully.");
+            break;
+        case 2:
+            Serial.println("Controller found but not accepting commands.");
+            break;
+        case 3:
+            Serial.println("Controller refusing to enter 'Pressures' mode, may not support it. ");      
+            break;
+    }
 #endif
 
     // Attach to the servos
@@ -157,7 +171,7 @@ void setup()
     Wro_Servo.attach(WRO_SERVO_PIN);
 #endif
 
-    servo_park();
+    servo_park(PARK_READY);
     
 #ifdef DEBUG
     Serial.println("Start");
@@ -191,8 +205,8 @@ void loop()
     // Can only be positive, so enforce lower bound
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += (ry_trans / JS_SCALE_FACTOR);
-                y_tmp = max(y_tmp, 0);
-        }
+        y_tmp = max(y_tmp, 0);
+    }
 
     // Z Position
     // Can only be positive, so enforce lower bound
@@ -244,7 +258,6 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     float s_w_sqrt = sqrt(s_w);
     
     // s_w angle to ground
-    //float a1 = atan2(wrist_y, wrist_z);
     float a1 = atan2(wrist_z, wrist_y);
     
     // s_w angle to humerus
@@ -252,14 +265,14 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     
     // Shoulder angle
     float shl_angle_r = a1 + a2;
-    // If result is NAN or Infinity, the desired am position is not possible
+    // If result is NAN or Infinity, the desired arm position is not possible
     if (isnan(shl_angle_r) || isinf(shl_angle_r))
         return 1;    // Return error
     float shl_angle_d = degrees(shl_angle_r);
     
     // Elbow angle
     float elb_angle_r = acos((hum_sq + uln_sq - s_w) / (2 * HUMERUS * ULNA));
-    // If result is NAN or Infinity, the desired am position is not possible
+    // If result is NAN or Infinity, the desired arm position is not possible
     if (isnan(elb_angle_r) || isinf(elb_angle_r))
         return 1;    // Return error
     float elb_angle_d = degrees(elb_angle_r);
@@ -311,20 +324,30 @@ int set_arm(float x, float y, float z, float grip_angle_d)
 }
  
 // Move servos to parking position
-void servo_park()
+void servo_park(int park_type)
 {
-
-    set_arm(X, Y, Z, Grip_Angle);
-/*
-    Bas_Servo.write(SERVO_MIDPOINT);
-    Shl_Servo.write(SERVO_MIDPOINT);
-    Elb_Servo.write(SERVO_MIDPOINT);
-    Wri_Servo.write(SERVO_MIDPOINT);
-*/  
-    Gri_Servo.write(SERVO_MIDPOINT);
+    switch (park_type) {
+        // All servos at midpoint
+        case PARK_MIDPOINT:
+            Bas_Servo.write(SERVO_MIDPOINT);
+            Shl_Servo.write(SERVO_MIDPOINT);
+            Elb_Servo.write(SERVO_MIDPOINT);
+            Wri_Servo.write(SERVO_MIDPOINT);
+            Gri_Servo.write(SERVO_MIDPOINT);
 #ifdef WRIST_ROTATE
-    Wro_Servo.write(SERVO_MIDPOINT);
+            Wro_Servo.write(SERVO_MIDPOINT);
 #endif
+            break;
+        
+        // Ready To Run position
+        case PARK_READY
+            set_arm(READY_X, READY_Y, READY_Z, READY_GA);
+            Gri_Servo.write(SERVO_MIDPOINT);
+#ifdef WRIST_ROTATE
+            Wro_Servo.write(SERVO_MIDPOINT);
+#endif
+            break;
+    }
 
     return;
 }
