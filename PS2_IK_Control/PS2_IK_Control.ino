@@ -51,13 +51,17 @@
 #include <PS2X_lib.h>
 
 //#define DEBUG             // Uncomment to turn on debugging output
+#define CYL_IK              // Apply only 2D, or cylindrical, kinematics. The X-axis component is
+                            // removed from the equations by fixing it at 0. The arm position is
+                            // calculated in the Y and Z planes, and simply rotates around the base.
 //#define WRIST_ROTATE      // Uncomment if wrist rotate hardware is installed
 
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
-#define BASE_HGT 80.975     // Base height 3.188"
+//#define BASE_HGT 80.9625    // Base height 3.1875"
+#define BASE_HGT 105.9625   // hack to get gripper to touch surface - need to fix
 #define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
-#define ULNA 325.450        // Elbow-to-wrist "bone" 12.813"
-#define GRIPPER 79.375      // Gripper length 3.125"
+#define ULNA 325.4375       // Elbow-to-wrist "bone" 12.8125"
+#define GRIPPER 85.725      // Gripper length 3.375"
 
 // Arduino pin numbers for servo connections
 #define BAS_SERVO_PIN 2     // Base servo HS-485HB
@@ -96,7 +100,8 @@
 // Joystick characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
 #define JS_DEADBAND 4       // Ignore movement this close to the center position
-#define JS_SCALE_FACTOR 100.0 // Divisor for scaling JS output
+#define JS_IK_SCALE 100.0   // Divisor for scaling JS output for IK control
+#define JS_SCALE 300.00     // Divisor for scaling JS output for raw servo control
 #define Z_INCREMENT 1.0     // Change in Z axis per button press
 #define G_INCREMENT 2.0     // Change in Gripper position per button press
  
@@ -122,17 +127,21 @@ Servo   Wro_Servo;
 #define PARK_READY 2        // Servos at Ready To Run positions
 
 // Ready To Run arm position
-#define READY_X 0.0
-#define READY_Y 200.0
-#define READY_Z 200.0
-#define READY_GA 0.0
-#define READY_G SERVO_MIDPOINT
+#ifdef CYL_IK   // 2D kinematics
+#define READY_X 90.0        // degrees
+#else           // 3D kinematics
+#define READY_X 0.0         // mm
+#endif
+#define READY_Y 200.0       // mm
+#define READY_Z 200.0       // mm
+#define READY_GA 0.0        // degrees
+#define READY_G SERVO_MIDPOINT  //degrees
 #ifdef  WRIST_ROTATE
-#define READY_WR SERVO_MIDPOINT
+#define READY_WR SERVO_MIDPOINT // degrees
 #endif
 
 // Global variables for arm position, and initial settings
-float X = READY_X;          // Left/right from base centerline, in mm. 0 = straight
+float X = READY_X;          // Left/right from base centerline, in mm. 0 mm = straight
 float Y = READY_Y;          // Away (out) from base center, in mm
 float Z = READY_Z;          // Up from surface, in mm
 float GA = READY_GA;        // Gripper angle, in degrees. 0 = horizontal
@@ -214,15 +223,23 @@ void loop()
 
     // X Position (in mm)
     // Can be positive or negative, so no range checks needed
+#ifdef CYL_IK   // 2D kinematics
     if (abs(rx_trans) > JS_DEADBAND) {
-        x_tmp += (rx_trans / JS_SCALE_FACTOR);
+        X += (rx_trans / JS_SCALE);
+        X = constrain(X, BAS_MIN, BAS_MAX);
+        Bas_Servo.write(X);
+    }
+#else           // 3D kinematics
+    if (abs(rx_trans) > JS_DEADBAND) {
+        x_tmp += (rx_trans / JS_IK_SCALE);
         arm_move = true;
     }
+#endif
 
     // Y Position (in mm)
     // Can only be positive, so enforce lower bound
     if (abs(ry_trans) > JS_DEADBAND) {
-        y_tmp += (ry_trans / JS_SCALE_FACTOR);
+        y_tmp += (ry_trans / JS_IK_SCALE);
         y_tmp = max(y_tmp, 0);
         arm_move = true;
     }
@@ -242,7 +259,7 @@ void loop()
     // Grip angle (in degrees)
     // Can be positive or negative, so no range checks needed
     if (abs(ly_trans) > JS_DEADBAND) {
-        ga_tmp += (ly_trans / JS_SCALE_FACTOR);
+        ga_tmp += (ly_trans / JS_IK_SCALE);
         arm_move = true;
     }
 
@@ -256,10 +273,6 @@ void loop()
 
         G = constrain(G, GRI_MIN, GRI_MAX);
         Gri_Servo.write(G);
-#ifdef DEBUG
-        Serial.print("G: ");
-        Serial.println(G);
-#endif
     }
 
     // Fully open gripper
@@ -272,7 +285,7 @@ void loop()
     // Wrist rotate (in degrees)
     // Restrict to MIN/MAX range of servo
     if (abs(lx_trans) > JS_DEADBAND) {
-        WR += (lx_trans / JS_SCALE_FACTOR);
+        WR += (lx_trans / JS_SCALE);
         WR = constrain(WR, WRO_MIN, WRO_MAX);
         Wro_Servo.write(WR);
     }
@@ -280,6 +293,15 @@ void loop()
 
     // Only call this if arm motion is needed.
     if (arm_move) {
+#ifdef CYL_IK   // 2D kinematics
+        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == 0) {
+            // If the arm was positioned successfully, record
+            // the new vales. Otherwise, ignore them.
+            Y = y_tmp;
+            Z = z_tmp;
+            GA = ga_tmp;
+        }
+#else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == 0) {
             // If the arm was positioned successfully, record
             // the new vales. Otherwise, ignore them.
@@ -288,6 +310,7 @@ void loop()
             Z = z_tmp;
             GA = ga_tmp;
         }
+#endif
         // Reset the flag
         arm_move = false;
     }
@@ -353,7 +376,11 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     float wri_pos = constrain(SERVO_MIDPOINT + wri_angle_d, WRI_MIN, WRI_MAX);
  
     // Servo output
+#ifdef CYL_IK   // 2D kinematics
+    // Do not control base servo
+#else           // 3D kinematics
     Bas_Servo.write(bas_pos);
+#endif
     Shl_Servo.write(shl_pos);
     Elb_Servo.write(elb_pos);
     Wri_Servo.write(wri_pos);
@@ -381,7 +408,9 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     Serial.print("  shl_angle_d: ");
     Serial.print(shl_angle_d);  
     Serial.print("  elb_angle_d: ");
-    Serial.println(elb_angle_d);
+    Serial.print(elb_angle_d);
+    Serial.print("  wri_angle_d: ");
+    Serial.println(wri_angle_d);
     Serial.println();
 #endif
 
@@ -406,7 +435,12 @@ void servo_park(int park_type)
         
         // Ready To Run position
         case PARK_READY:
+#ifdef CYL_IK   // 2D kinematics
+            set_arm(0.0, READY_Y, READY_Z, READY_GA);
+            Bas_Servo.write(READY_X);
+#else           // 3D kinematics
             set_arm(READY_X, READY_Y, READY_Z, READY_GA);
+#endif
             Gri_Servo.write(READY_G);
 #ifdef WRIST_ROTATE
             Wro_Servo.write(READY_WR);
@@ -416,3 +450,5 @@ void servo_park(int park_type)
 
     return;
 }
+
+
