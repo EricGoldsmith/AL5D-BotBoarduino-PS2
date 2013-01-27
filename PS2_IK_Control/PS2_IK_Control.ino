@@ -73,7 +73,14 @@
 #define WRO_SERVO_PIN 12    // Wrist rotate servo HS-485HB
 #endif
 
-#define SERVO_MIDPOINT 90.0 // 90 degrees is the rotation midpoint of each servo
+// Arduino pin numbers for PS2 controller connections
+#define PS2_CLK_PIN 9        // Clock
+#define PS2_CMD_PIN 7        // Command
+#define PS2_ATT_PIN 8        // Attention
+#define PS2_DAT_PIN 6        // Data
+
+// Arduino pin number of on-board speaker
+#define SPK_PIN 5
 
 // Set physical limits (in degrees) per servo
 #define BAS_MIN 0.0
@@ -91,19 +98,20 @@
 #define WRO_MAX 180.0
 #endif
 
-// Arduino pin numbers for PS2 controller connections
-#define PS2_CLK 9           // Clock
-#define PS2_CMD 7           // Command
-#define PS2_ATT 8           // Attention
-#define PS2_DAT 6           // Data
+#define SERVO_MIDPOINT 90.0 // 90 degrees is the rotation midpoint of each servo
 
-// Joystick characteristics
+// PS2 controller characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
 #define JS_DEADBAND 4       // Ignore movement this close to the center position
 #define JS_IK_SCALE 100.0   // Divisor for scaling JS output for IK control
 #define JS_SCALE 300.00     // Divisor for scaling JS output for raw servo control
 #define Z_INCREMENT 1.0     // Change in Z axis per button press
 #define G_INCREMENT 2.0     // Change in Gripper position per button press
+
+// Audible feedback sounds
+#define TONE_IK_ERROR 500      // Hz
+#define TONE_SERVO_LIMIT 1000  // Hz
+#define TONE_DURATION 200      // ms
  
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -128,26 +136,26 @@ Servo   Wro_Servo;
 
 // Ready To Run arm position
 #ifdef CYL_IK   // 2D kinematics
-#define READY_X 90.0        // degrees
+#define READY_X 90.0        // degrees. 90 = straight
 #else           // 3D kinematics
-#define READY_X 0.0         // mm
+#define READY_X 0.0         // mm. 0 = straight
 #endif
 #define READY_Y 200.0       // mm
 #define READY_Z 200.0       // mm
-#define READY_GA 0.0        // degrees
-#define READY_G SERVO_MIDPOINT  //degrees
+#define READY_GA 0.0        // degrees. 0 = horizontal
+#define READY_G SERVO_MIDPOINT  //degrees. 90 degrees is mid-way open
 #ifdef  WRIST_ROTATE
-#define READY_WR SERVO_MIDPOINT // degrees
+#define READY_WR SERVO_MIDPOINT // degrees. 90 degrees is horizontal
 #endif
 
 // Global variables for arm position, and initial settings
-float X = READY_X;          // Left/right from base centerline, in mm. 0 mm = straight
-float Y = READY_Y;          // Away (out) from base center, in mm
-float Z = READY_Z;          // Up from surface, in mm
-float GA = READY_GA;        // Gripper angle, in degrees. 0 = horizontal
-float G = READY_G;          // Gripper jaw opening. 90 degrees is mid-way open
+float X = READY_X;          // Left/right from base centerline.
+float Y = READY_Y;          // Away (out) from base center.
+float Z = READY_Z;          // Up from surface.
+float GA = READY_GA;        // Gripper angle, in degrees. 
+float G = READY_G;          // Gripper jaw opening. 
 #ifdef  WRIST_ROTATE
-float WR = READY_WR;        // Wrist Rotate. 90 degrees is horizontal
+float WR = READY_WR;        // Wrist Rotate.
 #endif
 
  
@@ -157,11 +165,21 @@ void setup()
     Serial.begin(115200);
 #endif
 
+    // Attach to the servos
+    Bas_Servo.attach(BAS_SERVO_PIN);
+    Shl_Servo.attach(SHL_SERVO_PIN);
+    Elb_Servo.attach(ELB_SERVO_PIN);
+    Wri_Servo.attach(WRI_SERVO_PIN);
+    Gri_Servo.attach(GRI_SERVO_PIN);
+#ifdef WRIST_ROTATE
+    Wro_Servo.attach(WRO_SERVO_PIN);
+#endif
+
     // Setup PS2 controller pins and settings and check for error
     //  GamePad(clock, command, attention, data, Pressures?, Rumble?)
     byte    ps2_stat;
     do {
-        ps2_stat = Ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_ATT, PS2_DAT, true, true);
+        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, true, true);
 #ifdef DEBUG
         if (ps2_stat == 1)
             Serial.println("No controller found. Re-trying ...");
@@ -180,16 +198,6 @@ void setup()
             Serial.println("Controller refusing to enter 'Pressures' mode, may not support it. ");      
             break;
     }
-#endif
-
-    // Attach to the servos
-    Bas_Servo.attach(BAS_SERVO_PIN);
-    Shl_Servo.attach(SHL_SERVO_PIN);
-    Elb_Servo.attach(ELB_SERVO_PIN);
-    Wri_Servo.attach(WRI_SERVO_PIN);
-    Gri_Servo.attach(GRI_SERVO_PIN);
-#ifdef WRIST_ROTATE
-    Wro_Servo.attach(WRO_SERVO_PIN);
 #endif
 
     servo_park(PARK_READY);
@@ -221,15 +229,17 @@ void loop()
     int ry_trans = JS_MIDPOINT - Ps2x.Analog(PSS_RY);
     int rx_trans = Ps2x.Analog(PSS_RX) - JS_MIDPOINT;
 
-    // X Position (in mm)
-    // Can be positive or negative, so no range checks needed
 #ifdef CYL_IK   // 2D kinematics
+    // Base Position (in degrees)
+    // Restrict to MIN/MAX range of servo
     if (abs(rx_trans) > JS_DEADBAND) {
         X += (rx_trans / JS_SCALE);
         X = constrain(X, BAS_MIN, BAS_MAX);
         Bas_Servo.write(X);
     }
 #else           // 3D kinematics
+    // X Position (in mm)
+    // Can be positive or negative, so no range checks needed
     if (abs(rx_trans) > JS_DEADBAND) {
         x_tmp += (rx_trans / JS_IK_SCALE);
         arm_move = true;
@@ -256,10 +266,12 @@ void loop()
         arm_move = true;
     }
 
-    // Grip angle (in degrees)
-    // Can be positive or negative, so no range checks needed
+    // Gripper angle (in degrees)
+    // Restrict to MIN/MAX range of servo
     if (abs(ly_trans) > JS_DEADBAND) {
         ga_tmp += (ly_trans / JS_IK_SCALE);
+        // Since gripper angle is relative to arm (i.e. 0 = horizontal), add 90 when comparing to servo limits
+        ga_tmp = constrain((ga_tmp + SERVO_MIDPOINT), WRI_MIN, WRI_MAX);
         arm_move = true;
     }
 
@@ -300,7 +312,10 @@ void loop()
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        }
+        } else
+            // Send audible feedback of IK error
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            
 #else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == 0) {
             // If the arm was positioned successfully, record
@@ -309,8 +324,11 @@ void loop()
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        }
+        } else
+            // Send audible feedback of IK error
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
 #endif
+
         // Reset the flag
         arm_move = false;
     }
@@ -369,11 +387,21 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     // Wrist angle
     float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
-    // Calculate servo angles and constrain servo positions
-    float bas_pos = constrain(SERVO_MIDPOINT + degrees(bas_angle_r), BAS_MIN, BAS_MAX);
-    float shl_pos = constrain(SERVO_MIDPOINT + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
-    float elb_pos = constrain(SERVO_MIDPOINT - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
-    float wri_pos = constrain(SERVO_MIDPOINT + wri_angle_d, WRI_MIN, WRI_MAX);
+    // Calculate servo angles
+    float bas_pos_tmp = SERVO_MIDPOINT + degrees(bas_angle_r);
+    float shl_pos_tmp = SERVO_MIDPOINT + (shl_angle_d - 90.0);
+    float elb_pos_tmp = SERVO_MIDPOINT - (elb_angle_d - 90.0);
+    float wri_pos_tmp = SERVO_MIDPOINT + wri_angle_d;
+    
+    // Constrain servo positions
+    float bas_pos = constrain(bas_pos_tmp, BAS_MIN, BAS_MAX);
+    float shl_pos = constrain(shl_pos_tmp, SHL_MIN, SHL_MAX);
+    float elb_pos = constrain(elb_pos_tmp, ELB_MIN, ELB_MAX);
+    float wri_pos = constrain(wri_pos_tmp, WRI_MIN, WRI_MAX);
+    
+    // If we hit any servo limits, send audible feedback
+    if ((bas_pos_tmp != bas_pos) || (shl_pos_tmp != shl_pos) || (elb_pos_tmp != elb_pos) || (wri_pos_tmp != wri_pos))
+        tone(SPK_PIN, TONE_SERVO_LIMIT, TONE_DURATION);
  
     // Servo output
 #ifdef CYL_IK   // 2D kinematics
