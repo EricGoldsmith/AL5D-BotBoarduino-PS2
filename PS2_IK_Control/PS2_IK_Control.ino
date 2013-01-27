@@ -56,9 +56,13 @@
                             // calculated in the Y and Z planes, and simply rotates around the base.
 //#define WRIST_ROTATE      // Uncomment if wrist rotate hardware is installed
 
+// IK function return values
+#define IK_SUCCESS 0
+#define IK_ERROR 1            // Desired position not possible
+
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
-//#define BASE_HGT 80.9625    // Base height 3.1875"
-#define BASE_HGT 105.9625   // hack to get gripper to touch surface - need to fix
+#define BASE_HGT 80.9625    // Base height 3.1875"
+//#define BASE_HGT 105.9625   // hack to get gripper to touch surface - need to fix
 #define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
 #define ULNA 325.4375       // Elbow-to-wrist "bone" 12.8125"
 #define GRIPPER 85.725      // Gripper length 3.375"
@@ -84,21 +88,34 @@
 
 // Set physical limits (in degrees) per servo
 #define BAS_MIN 0.0
+#define BAS_MID 91.0
 #define BAS_MAX 180.0
-#define SHL_MIN 5.0 
+
+#define SHL_MIN 5.0
+#define SHL_MID 84.0
 #define SHL_MAX 140.0
-#define ELB_MIN 15.0
-#define ELB_MAX 155.0
+
+#define ELB_MIN 17.0
+#define ELB_MID 90.0
+#define ELB_MAX 160.0
+
 #define WRI_MIN 0.0
+#define WRI_MID 99.0
 #define WRI_MAX 180.0
+
 #define GRI_MIN 25.0        // Fully open
+#define GRI_MID 90.0
 #define GRI_MAX 165.0       // Fully closed
+
 #ifdef WRIST_ROTATE
 #define WRO_MIN 0.0
+#define WRO_MID 90.0
 #define WRO_MAX 180.0
 #endif
 
-#define SERVO_MIDPOINT 90.0 // 90 degrees is the rotation midpoint of each servo
+// Navigation limits
+#define Y_MIN 200.0         // mm
+#define Z_MIN 0.0
 
 // PS2 controller characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
@@ -136,16 +153,16 @@ Servo   Wro_Servo;
 
 // Ready To Run arm position
 #ifdef CYL_IK   // 2D kinematics
-#define READY_X 90.0        // degrees. 90 = straight
+#define READY_X (BAS_MID - 45.0)
 #else           // 3D kinematics
 #define READY_X 0.0         // mm. 0 = straight
 #endif
-#define READY_Y 200.0       // mm
-#define READY_Z 200.0       // mm
-#define READY_GA 0.0        // degrees. 0 = horizontal
-#define READY_G SERVO_MIDPOINT  //degrees. 90 degrees is mid-way open
+#define READY_Y Y_MIN       // mm
+#define READY_Z 50.0        // mm
+#define READY_GA 0.0        // degrees, relative to X/Y plane. 0 = horizontal
+#define READY_G GRI_MID     //degrees. midpoint is halfway open
 #ifdef  WRIST_ROTATE
-#define READY_WR SERVO_MIDPOINT // degrees. 90 degrees is horizontal
+#define READY_WR WRO_MID    // degrees. 90 degrees is horizontal
 #endif
 
 // Global variables for arm position, and initial settings
@@ -201,6 +218,7 @@ void setup()
 #endif
 
     servo_park(PARK_READY);
+//    servo_park(PARK_MIDPOINT);
 
 #ifdef DEBUG
     Serial.println("Start");
@@ -250,7 +268,8 @@ void loop()
     // Can only be positive, so enforce lower bound
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += (ry_trans / JS_IK_SCALE);
-        y_tmp = max(y_tmp, 0);
+//        y_tmp = max(y_tmp, 0);
+        y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
     }
 
@@ -261,7 +280,7 @@ void loop()
             z_tmp += Z_INCREMENT;   // up
         else {
             z_tmp -= Z_INCREMENT;   // down
-            z_tmp = max(z_tmp, 0);
+            z_tmp = max(z_tmp, Z_MIN);
         }
         arm_move = true;
     }
@@ -270,8 +289,6 @@ void loop()
     // Restrict to MIN/MAX range of servo
     if (abs(ly_trans) > JS_DEADBAND) {
         ga_tmp += (ly_trans / JS_IK_SCALE);
-        // Since gripper angle is relative to arm (i.e. 0 = horizontal), add 90 when comparing to servo limits
-        ga_tmp = constrain((ga_tmp + SERVO_MIDPOINT), WRI_MIN, WRI_MAX);
         arm_move = true;
     }
 
@@ -306,27 +323,22 @@ void loop()
     // Only call this if arm motion is needed.
     if (arm_move) {
 #ifdef CYL_IK   // 2D kinematics
-        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == 0) {
+        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
             // the new vales. Otherwise, ignore them.
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        } else
-            // Send audible feedback of IK error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
-            
+        }            
 #else           // 3D kinematics
-        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == 0) {
+        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
             // the new vales. Otherwise, ignore them.
             X = x_tmp;
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        } else
-            // Send audible feedback of IK error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+        }
 #endif
 
         // Reset the flag
@@ -338,7 +350,7 @@ void loop()
  
 // Arm positioning routine utilizing inverse kinematics
 // z is height, y is distance from base center out, x is side to side. y, z can only be positive
-// If resulting arm position is physically unreachable, return error (1). Otherwise, return success (0)
+// If resulting arm position is physically unreachable, return error code.
 int set_arm(float x, float y, float z, float grip_angle_d)
 {
     //grip angle in radians for use in calculations
@@ -373,25 +385,25 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     float shl_angle_r = a1 + a2;
     // If result is NAN or Infinity, the desired arm position is not possible
     if (isnan(shl_angle_r) || isinf(shl_angle_r))
-        return 1;    // Return error
+        return IK_ERROR;
     float shl_angle_d = degrees(shl_angle_r);
     
     // Elbow angle
     float elb_angle_r = acos((hum_sq + uln_sq - s_w) / (2 * HUMERUS * ULNA));
     // If result is NAN or Infinity, the desired arm position is not possible
     if (isnan(elb_angle_r) || isinf(elb_angle_r))
-        return 1;    // Return error
+        return IK_ERROR;
     float elb_angle_d = degrees(elb_angle_r);
     float elb_angle_dn = -(180.0 - elb_angle_d);
     
     // Wrist angle
     float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
-    // Calculate servo angles
-    float bas_pos_tmp = SERVO_MIDPOINT + degrees(bas_angle_r);
-    float shl_pos_tmp = SERVO_MIDPOINT + (shl_angle_d - 90.0);
-    float elb_pos_tmp = SERVO_MIDPOINT - (elb_angle_d - 90.0);
-    float wri_pos_tmp = SERVO_MIDPOINT + wri_angle_d;
+    // Calculate servo angles. Calc relative to servo midpoint to allow compensation for servo alignment
+    float bas_pos_tmp = BAS_MID + degrees(bas_angle_r);
+    float shl_pos_tmp = SHL_MID + (shl_angle_d - 90.0);
+    float elb_pos_tmp = ELB_MID - (elb_angle_d - 90.0);
+    float wri_pos_tmp = WRI_MID + wri_angle_d;
     
     // Constrain servo positions
     float bas_pos = constrain(bas_pos_tmp, BAS_MIN, BAS_MAX);
@@ -399,9 +411,13 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     float elb_pos = constrain(elb_pos_tmp, ELB_MIN, ELB_MAX);
     float wri_pos = constrain(wri_pos_tmp, WRI_MIN, WRI_MAX);
     
-    // If we hit any servo limits, send audible feedback
-    if ((bas_pos_tmp != bas_pos) || (shl_pos_tmp != shl_pos) || (elb_pos_tmp != elb_pos) || (wri_pos_tmp != wri_pos))
-        tone(SPK_PIN, TONE_SERVO_LIMIT, TONE_DURATION);
+    // If we hit any servo limits, send audible feedback and return error
+//    if ((bas_pos_tmp != bas_pos) || (shl_pos_tmp != shl_pos) || (elb_pos_tmp != elb_pos) || (wri_pos_tmp != wri_pos)) {
+//        tone(SPK_PIN, TONE_SERVO_LIMIT, TONE_DURATION);
+//        delay(TONE_DURATION);
+//        tone(SPK_PIN, TONE_SERVO_LIMIT, TONE_DURATION);
+//        return ERROR;
+//    }
  
     // Servo output
 #ifdef CYL_IK   // 2D kinematics
@@ -420,7 +436,7 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     Serial.print(y);
     Serial.print("  Z: ");
     Serial.print(z);
-    Serial.print("  WA: ");
+    Serial.print("  GA: ");
     Serial.print(grip_angle_d);
     Serial.println();
     Serial.print("Base Pos: ");
@@ -442,7 +458,7 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     Serial.println();
 #endif
 
-    return 0;
+    return IK_SUCCESS;
 }
  
 // Move servos to parking position
@@ -451,13 +467,13 @@ void servo_park(int park_type)
     switch (park_type) {
         // All servos at midpoint
         case PARK_MIDPOINT:
-            Bas_Servo.write(SERVO_MIDPOINT);
-            Shl_Servo.write(SERVO_MIDPOINT);
-            Elb_Servo.write(SERVO_MIDPOINT);
-            Wri_Servo.write(SERVO_MIDPOINT);
-            Gri_Servo.write(SERVO_MIDPOINT);
+            Bas_Servo.write(BAS_MID);
+            Shl_Servo.write(SHL_MID);
+            Elb_Servo.write(ELB_MID);
+            Wri_Servo.write(WRI_MID);
+            Gri_Servo.write(GRI_MID);
 #ifdef WRIST_ROTATE
-            Wro_Servo.write(SERVO_MIDPOINT);
+            Wro_Servo.write(WRO_MID);
 #endif
             break;
         
