@@ -36,6 +36,7 @@
 *
 *    To Do
 *    - Add control to modify speed of movement during program run
+*    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -129,6 +130,7 @@
 
 // Audible feedback sounds
 #define TONE_READY 1000     // Hz
+#define TONE_IK_ERROR 200   // Hz
 #define TONE_DURATION 200   // ms
  
 // Pre-calculations
@@ -218,6 +220,7 @@ void setup()
     }
 #endif
 
+    // Ensure arm is close to the park position before turning on servo power!
     servo_park(PARK_READY);
 
 #ifdef DEBUG
@@ -330,7 +333,9 @@ void loop()
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        }            
+        } else
+            // Sound tone for audible feedback of error
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION/2);
 #else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
@@ -339,7 +344,9 @@ void loop()
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        }
+        } else
+            // Sound tone for audible feedback of error
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION/2);
 #endif
 
         // Reset the flag
@@ -350,7 +357,8 @@ void loop()
  }
  
 // Arm positioning routine utilizing inverse kinematics
-// z is height, y is distance from base center out, x is side to side. y, z can only be positive
+// Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive
+// Dimensions are for the gripper, just short of its tip, where it grabs things
 // If resulting arm position is physically unreachable, return error code.
 int set_arm(float x, float y, float z, float grip_angle_d)
 {
@@ -486,3 +494,5 @@ void servo_park(int park_type)
 
     return;
 }
+
+
