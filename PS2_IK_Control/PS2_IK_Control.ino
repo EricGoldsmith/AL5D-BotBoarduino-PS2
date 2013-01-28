@@ -100,7 +100,7 @@
 
 #define ELB_MIN 20.0
 #define ELB_MID 90.0
-#define ELB_MAX 160.0
+#define ELB_MAX 165.0
 
 #define WRI_MIN 0.0
 #define WRI_MID 99.0
@@ -117,10 +117,7 @@
 #endif
 
 // Navigation limits
-#define Y_MIN 180.0         // mm
-//#define Y_MAX 600.0
-//#define Z_MIN 0.0
-//#define Z_MAX 725.0
+#define Y_MIN 170.0         // mm
 
 // PS2 controller characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
@@ -162,7 +159,7 @@ Servo   Wro_Servo;
 #define READY_X 0.0         // mm. 0 = straight
 #endif
 #define READY_Y Y_MIN       // mm
-#define READY_Z 50.0        // mm
+#define READY_Z 45.0        // mm
 #define READY_GA 0.0        // degrees, relative to X/Y plane. 0 = horizontal
 #define READY_G GRI_MID     //degrees. midpoint is halfway open
 #ifdef  WRIST_ROTATE
@@ -222,7 +219,6 @@ void setup()
 #endif
 
     servo_park(PARK_READY);
-//    servo_park(PARK_MIDPOINT);
 
 #ifdef DEBUG
     Serial.println("Start");
