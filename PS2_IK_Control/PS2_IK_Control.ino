@@ -35,10 +35,6 @@
 *       0.3 Added constraint logic
 *
 *    To Do
-*    - Determine why Z=0 doesn't touch surface (may be caused by counter-weight springs)
-*    - Try to reduce Y_MIN value, to get closer to base
-*    - Handle case where servo limit is reached in IK code and prevent subsequent
-*        increases in corresponding dimension(s)
 *    - Add control to modify speed of movement during program run
 *
 * This program is free software: you can redistribute it and/or modify
@@ -67,11 +63,10 @@
 #define IK_ERROR 1          // Desired position not possible
 
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
-//#define BASE_HGT 80.9625    // Base height 3.1875"
-#define BASE_HGT 92.0       // hack to get gripper to touch surface - need to fix
+#define BASE_HGT 80.9625    // Base height 3.1875"
 #define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
 #define ULNA 325.4375       // Elbow-to-wrist "bone" 12.8125"
-#define GRIPPER 85.725      // Gripper length 3.375"
+#define GRIPPER 73.025      // Gripper length, to middle of grip surface 2.875" (3.375" - 0.5")
 
 // Arduino pin numbers for servo connections
 #define BAS_SERVO_PIN 2     // Base servo HS-485HB
@@ -123,9 +118,9 @@
 
 // Navigation limits
 #define Y_MIN 180.0         // mm
-#define Y_MAX 600.0
-#define Z_MIN 0.0
-#define Z_MAX 725.0
+//#define Y_MAX 600.0
+//#define Z_MIN 0.0
+//#define Z_MAX 725.0
 
 // PS2 controller characteristics
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
@@ -262,16 +257,15 @@ void loop()
     // Base Position (in degrees)
     // Restrict to MIN/MAX range of servo
     if (abs(rx_trans) > JS_DEADBAND) {
-        // Muliplyting by the ratio (Y_MIN/Y) is to ensure 
-        // constant linear velocity of the gripper, 
-        // based on gripper's distance from base
+        // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
+        // of the gripper, based on gripper's distance from base
         X += (rx_trans / JS_SCALE * (Y_MIN/Y));
         X = constrain(X, BAS_MIN, BAS_MAX);
         Bas_Servo.write(X);
     }
 #else           // 3D kinematics
     // X Position (in mm)
-    // Can be positive or negative, so no range checks needed
+    // Can be positive or negative. Range checking in IK code
     if (abs(rx_trans) > JS_DEADBAND) {
         x_tmp += (rx_trans / JS_IK_SCALE);
         arm_move = true;
@@ -279,25 +273,26 @@ void loop()
 #endif
 
     // Y Position (in mm)
-    // Enforce movement constraints
+    // Must be > Y_MIN. Range checking in IK code
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += (ry_trans / JS_IK_SCALE);
-        y_tmp = constrain(y_tmp, Y_MIN, Y_MAX);
+        y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
     }
 
     // Z Position (in mm)
-    // Enforce movement constraints
+    // Must be positive. Range checking in IK code
     if (Ps2x.Button(PSB_R1) || Ps2x.Button(PSB_R2)) {
         if (Ps2x.Button(PSB_R1))
             z_tmp += Z_INCREMENT;   // up
         else
             z_tmp -= Z_INCREMENT;   // down
-        z_tmp = constrain(z_tmp, Z_MIN, Z_MAX);
+        z_tmp = max(z_tmp, 0);
         arm_move = true;
     }
 
-    // Gripper angle (in degrees)
+    // Gripper angle (in degrees) relative to horizontal
+    // Can be positive or negative. Range checking in IK code
     if (abs(ly_trans) > JS_DEADBAND) {
         ga_tmp += (ly_trans / JS_SCALE);
         arm_move = true;
@@ -310,7 +305,6 @@ void loop()
             G += G_INCREMENT;   // close
         else
             G -= G_INCREMENT;   // open
-
         G = constrain(G, GRI_MIN, GRI_MAX);
         Gri_Servo.write(G);
     }
@@ -410,12 +404,16 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     // Wrist angle
     float wri_angle_d = (grip_angle_d - elb_angle_dn) - shl_angle_d;
  
-    // Calculate servo angles end enforce constraints
+    // Calculate servo angles
     // Calc relative to servo midpoint to allow compensation for servo alignment
-    float bas_pos = constrain(BAS_MID + degrees(bas_angle_r), BAS_MIN, BAS_MAX);
-    float shl_pos = constrain(SHL_MID + (shl_angle_d - 90.0), SHL_MIN, SHL_MAX);
-    float elb_pos = constrain(ELB_MID - (elb_angle_d - 90.0), ELB_MIN, ELB_MAX);
-    float wri_pos = constrain(WRI_MID + wri_angle_d, WRI_MIN, WRI_MAX);
+    float bas_pos = BAS_MID + degrees(bas_angle_r);
+    float shl_pos = SHL_MID + (shl_angle_d - 90.0);
+    float elb_pos = ELB_MID - (elb_angle_d - 90.0);
+    float wri_pos = WRI_MID + wri_angle_d;
+    
+    // If any servo ranges are exceeded, return an error
+    if (bas_pos < BAS_MIN || bas_pos > BAS_MAX || shl_pos < SHL_MIN || shl_pos > SHL_MAX || elb_pos < ELB_MIN || elb_pos > ELB_MAX || wri_pos < WRI_MIN || wri_pos > WRI_MAX)
+        return IK_ERROR;
     
     // Servo output
 #ifdef CYL_IK   // 2D kinematics
@@ -492,6 +490,3 @@ void servo_park(int park_type)
 
     return;
 }
-
-
-
