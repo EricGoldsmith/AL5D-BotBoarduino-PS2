@@ -19,10 +19,10 @@
 *       Right Joystick L/R: Gripper tip X position (side to side)
 *       Right Joystick U/D: Gripper tip Y position (distance out from base center)
 *       R1/R2 Buttons:      Gripper tip Z position (height from surface)
-*       Left Joystick L/R   Wrist Rotate (if installed)
+*       Left Joystick L/R   Wrist rotate (if installed)
 *       Left Joystick U/D:  Wrist angle
 *       L1/L2 Buttons:      Gripper close/open
-*       X:                  Gripper fully open
+*       X Button:           Gripper fully open
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -32,7 +32,7 @@
 *   Version history
 *       0.1 Initial port of code to use Arduino Server Library
 *       0.2 Added PS2 controls
-*       0.3 Added constraint logic
+*       0.3 Added constraint logic & 2D kinematics
 *
 *    To Do
 *    - Add control to modify speed of movement during program run
@@ -54,17 +54,15 @@
 #include <PS2X_lib.h>
 
 //#define DEBUG             // Uncomment to turn on debugging output
+
 #define CYL_IK              // Apply only 2D, or cylindrical, kinematics. The X-axis component is
                             // removed from the equations by fixing it at 0. The arm position is
                             // calculated in the Y and Z planes, and simply rotates around the base.
+                            
 //#define WRIST_ROTATE      // Uncomment if wrist rotate hardware is installed
 
-// IK function return values
-#define IK_SUCCESS 0
-#define IK_ERROR 1          // Desired position not possible
-
 // Arm dimensions (mm). Standard AL5D arm, but with longer arm segments
-#define BASE_HGT 80.9625    // Base height 3.1875"
+#define BASE_HGT 80.9625    // Base height to X/Y plane 3.1875"
 #define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
 #define ULNA 325.4375       // Elbow-to-wrist "bone" 12.8125"
 #define GRIPPER 73.025      // Gripper length, to middle of grip surface 2.875" (3.375" - 0.5")
@@ -80,32 +78,32 @@
 #endif
 
 // Arduino pin numbers for PS2 controller connections
-#define PS2_CLK_PIN 9        // Clock
-#define PS2_CMD_PIN 7        // Command
-#define PS2_ATT_PIN 8        // Attention
-#define PS2_DAT_PIN 6        // Data
+#define PS2_CLK_PIN 9       // Clock
+#define PS2_CMD_PIN 7       // Command
+#define PS2_ATT_PIN 8       // Attention
+#define PS2_DAT_PIN 6       // Data
 
 // Arduino pin number of on-board speaker
 #define SPK_PIN 5
 
 // Set physical limits (in degrees) per servo
 // Will vary for each servo, depending on mechanical range of motion
-// The MID setting is the required servo input needed to get a 90 degree arm angle
-#define BAS_MIN 0.0
+// The MID setting is the required servo input needed to achieve a 90 degree arm angle
+#define BAS_MIN 0.0         // Fully CCW
 #define BAS_MID 91.0
-#define BAS_MAX 180.0
+#define BAS_MAX 180.0       // Fully CW
 
-#define SHL_MIN 20.0
+#define SHL_MIN 20.0        // Max forward motion
 #define SHL_MID 84.0
-#define SHL_MAX 140.0
+#define SHL_MAX 140.0       // Max rearward motion
 
-#define ELB_MIN 20.0
+#define ELB_MIN 20.0        // Max upward motion
 #define ELB_MID 90.0
-#define ELB_MAX 165.0
+#define ELB_MAX 165.0       // Max downward motion
 
-#define WRI_MIN 0.0
+#define WRI_MIN 0.0         // Max downward motion
 #define WRI_MID 99.0
-#define WRI_MAX 180.0
+#define WRI_MAX 180.0       // Max upward motion
 
 #define GRI_MIN 25.0        // Fully open
 #define GRI_MID 90.0
@@ -133,6 +131,38 @@
 #define TONE_IK_ERROR 200   // Hz
 #define TONE_DURATION 200   // ms
  
+// IK function return values
+#define IK_SUCCESS 0
+#define IK_ERROR 1          // Desired position not possible
+
+// Park positions
+#define PARK_MIDPOINT 1     // Servos at midpoints
+#define PARK_READY 2        // Servos at Ready To Run positions
+
+// Ready To Run arm position
+#ifdef CYL_IK   // 2D kinematics
+#define READY_X (BAS_MID - 45.0)
+#else           // 3D kinematics
+#define READY_X 0.0         // mm. 0 = straight
+#endif
+#define READY_Y Y_MIN       // mm
+#define READY_Z 45.0        // mm
+#define READY_GA 0.0        // degrees, relative to X/Y plane. 0 = horizontal
+#define READY_G GRI_MID     // degrees. midpoint is halfway open
+#ifdef  WRIST_ROTATE
+#define READY_WR WRO_MID    // degrees. midpoint is horizontal
+#endif
+
+// Global variables for arm position, and initial settings
+float X = READY_X;          // Left/right from base centerline.
+float Y = READY_Y;          // Away (out) from base center.
+float Z = READY_Z;          // Up from surface.
+float GA = READY_GA;        // Gripper angle, in degrees. 
+float G = READY_G;          // Gripper jaw opening. 
+#ifdef  WRIST_ROTATE
+float WR = READY_WR;        // Wrist Rotate.
+#endif
+
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
 float uln_sq = ULNA*ULNA;
@@ -149,35 +179,6 @@ Servo   Gri_Servo;
 #ifdef WRIST_ROTATE
 Servo   Wro_Servo;
 #endif
-
-// Park positions
-#define PARK_MIDPOINT 1     // Servos at midpoints
-#define PARK_READY 2        // Servos at Ready To Run positions
-
-// Ready To Run arm position
-#ifdef CYL_IK   // 2D kinematics
-#define READY_X (BAS_MID - 45.0)
-#else           // 3D kinematics
-#define READY_X 0.0         // mm. 0 = straight
-#endif
-#define READY_Y Y_MIN       // mm
-#define READY_Z 45.0        // mm
-#define READY_GA 0.0        // degrees, relative to X/Y plane. 0 = horizontal
-#define READY_G GRI_MID     //degrees. midpoint is halfway open
-#ifdef  WRIST_ROTATE
-#define READY_WR WRO_MID    // degrees. 90 degrees is horizontal
-#endif
-
-// Global variables for arm position, and initial settings
-float X = READY_X;          // Left/right from base centerline.
-float Y = READY_Y;          // Away (out) from base center.
-float Z = READY_Z;          // Up from surface.
-float GA = READY_GA;        // Gripper angle, in degrees. 
-float G = READY_G;          // Gripper jaw opening. 
-#ifdef  WRIST_ROTATE
-float WR = READY_WR;        // Wrist Rotate.
-#endif
-
  
 void setup()
 {
@@ -220,7 +221,7 @@ void setup()
     }
 #endif
 
-    // Ensure arm is close to the park position before turning on servo power!
+    // NOTE: Ensure arm is close to the park position before turning on servo power!
     servo_park(PARK_READY);
 
 #ifdef DEBUG

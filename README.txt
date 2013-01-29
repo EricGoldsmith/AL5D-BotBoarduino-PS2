@@ -19,10 +19,10 @@
 *       Right Joystick L/R: Gripper tip X position (side to side)
 *       Right Joystick U/D: Gripper tip Y position (distance out from base center)
 *       R1/R2 Buttons:      Gripper tip Z position (height from surface)
-*       Left Joystick L/R   Wrist Rotate (if installed)
+*       Left Joystick L/R   Wrist rotate (if installed)
 *       Left Joystick U/D:  Wrist angle
 *       L1/L2 Buttons:      Gripper close/open
-*       X:                  Gripper fully open
+*       X Button:           Gripper fully open
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -32,10 +32,11 @@
 *   Version history
 *       0.1 Initial port of code to use Arduino Server Library
 *       0.2 Added PS2 controls
-*       0.3 Added constraint logic
+*       0.3 Added constraint logic & 2D kinematics
 *
 *    To Do
 *    - Add control to modify speed of movement during program run
+*    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
