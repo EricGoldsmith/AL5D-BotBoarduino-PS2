@@ -23,6 +23,7 @@
 *       Left Joystick U/D:  Wrist angle
 *       L1/L2 Buttons:      Gripper close/open
 *       X Button:           Gripper fully open
+*       Digital Pad U/D:    Speed increase/decrease
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -33,9 +34,9 @@
 *       0.1 Initial port of code to use Arduino Server Library
 *       0.2 Added PS2 controls
 *       0.3 Added constraint logic & 2D kinematics
+*       0.4 Added control to modify speed of movement during program run
 *
 *    To Do
-*    - Add control to modify speed of movement during program run
 *    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
@@ -115,6 +116,13 @@
 #define WRO_MAX 180.0
 #endif
 
+// Speed adjustment parameters
+// Specified in percentages - applied to all arm movements
+#define SPEED_MIN 0.5
+#define SPEED_MAX 1.5
+#define SPEED_DEFAULT 1.0
+#define SPEED_INCREMENT 0.25
+
 // Navigation limits
 #define Y_MIN 170.0         // mm
 
@@ -162,6 +170,7 @@ float G = READY_G;          // Gripper jaw opening.
 #ifdef  WRIST_ROTATE
 float WR = READY_WR;        // Wrist Rotate.
 #endif
+float Speed = SPEED_DEFAULT
 
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -259,7 +268,7 @@ void loop()
     if (abs(rx_trans) > JS_DEADBAND) {
         // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
         // of the gripper, based on gripper's distance from base
-        X += (rx_trans / JS_SCALE * (Y_MIN/Y));
+        X += (rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
         X = constrain(X, BAS_MIN, BAS_MAX);
         Bas_Servo.write(X);
     }
@@ -267,7 +276,7 @@ void loop()
     // X Position (in mm)
     // Can be positive or negative. Range checking in IK code
     if (abs(rx_trans) > JS_DEADBAND) {
-        x_tmp += (rx_trans / JS_IK_SCALE);
+        x_tmp += (rx_trans / JS_IK_SCALE * Speed);
         arm_move = true;
     }
 #endif
@@ -275,7 +284,7 @@ void loop()
     // Y Position (in mm)
     // Must be > Y_MIN. Range checking in IK code
     if (abs(ry_trans) > JS_DEADBAND) {
-        y_tmp += (ry_trans / JS_IK_SCALE);
+        y_tmp += (ry_trans / JS_IK_SCALE * Speed);
         y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
     }
@@ -284,9 +293,9 @@ void loop()
     // Must be positive. Range checking in IK code
     if (Ps2x.Button(PSB_R1) || Ps2x.Button(PSB_R2)) {
         if (Ps2x.Button(PSB_R1))
-            z_tmp += Z_INCREMENT;   // up
+            z_tmp += Z_INCREMENT * Speed;   // up
         else
-            z_tmp -= Z_INCREMENT;   // down
+            z_tmp -= Z_INCREMENT * Speed;   // down
         z_tmp = max(z_tmp, 0);
         arm_move = true;
     }
@@ -294,7 +303,7 @@ void loop()
     // Gripper angle (in degrees) relative to horizontal
     // Can be positive or negative. Range checking in IK code
     if (abs(ly_trans) > JS_DEADBAND) {
-        ga_tmp += (ly_trans / JS_SCALE);
+        ga_tmp += (ly_trans / JS_SCALE * Speed);
         arm_move = true;
     }
 
@@ -305,6 +314,7 @@ void loop()
             G += G_INCREMENT;   // close
         else
             G -= G_INCREMENT;   // open
+            
         G = constrain(G, GRI_MIN, GRI_MAX);
         Gri_Servo.write(G);
     }
@@ -315,11 +325,25 @@ void loop()
         Gri_Servo.write(G);
     }
     
+    // Speed increase/decrease
+    if (Ps2x.Button(PSB_PAD_UP) || Ps2x.Button(PSB_PAD_DOWN)) {
+        if (Ps2x.Button(PSB_PAD_UP))
+            Speed += SPEED_INCREMENT;   // increase speed
+        else
+            Speed -= SPEED_INCREMENT;   // decrease speed
+        
+        // Constrain to limits
+        Speed = constrain(Speed, SPEED_MIN, SPEED_MAX);
+        
+        // Audible feedback
+        tone(SPK_PIN, (TONE_READY * Speed), TONE_DURATION/2);
+    }
+    
 #ifdef WRIST_ROTATE
     // Wrist rotate (in degrees)
     // Restrict to MIN/MAX range of servo
     if (abs(lx_trans) > JS_DEADBAND) {
-        WR += (lx_trans / JS_SCALE);
+        WR += (lx_trans / JS_SCALE * Speed);
         WR = constrain(WR, WRO_MIN, WRO_MAX);
         Wro_Servo.write(WR);
     }
