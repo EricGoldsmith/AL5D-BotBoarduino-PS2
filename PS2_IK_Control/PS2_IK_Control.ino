@@ -130,7 +130,7 @@
 #define JS_MIDPOINT 128     // Numeric value for joystick midpoint
 #define JS_DEADBAND 4       // Ignore movement this close to the center position
 #define JS_IK_SCALE 50.0    // Divisor for scaling JS output for IK control
-#define JS_SCALE 150.00     // Divisor for scaling JS output for raw servo control
+#define JS_SCALE 150.0      // Divisor for scaling JS output for raw servo control
 #define Z_INCREMENT 2.0     // Change in Z axis per button press
 #define G_INCREMENT 2.0     // Change in Gripper position per button press
 
@@ -272,7 +272,7 @@ void loop()
     if (abs(rx_trans) > JS_DEADBAND) {
         // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
         // of the gripper, based on gripper's distance from base
-        X += (rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
+        X += ((float)rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
         X = constrain(X, BAS_MIN, BAS_MAX);
         Bas_Servo.write(X);
     }
@@ -280,7 +280,7 @@ void loop()
     // X Position (in mm)
     // Can be positive or negative. Range checking in IK code
     if (abs(rx_trans) > JS_DEADBAND) {
-        x_tmp += (rx_trans / JS_IK_SCALE * Speed);
+        x_tmp += ((float)rx_trans / JS_IK_SCALE * Speed);
         arm_move = true;
     }
 #endif
@@ -288,7 +288,7 @@ void loop()
     // Y Position (in mm)
     // Must be > Y_MIN. Range checking in IK code
     if (abs(ry_trans) > JS_DEADBAND) {
-        y_tmp += (ry_trans / JS_IK_SCALE * Speed);
+        y_tmp += ((float)ry_trans / JS_IK_SCALE * Speed);
         y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
     }
@@ -307,7 +307,7 @@ void loop()
     // Gripper angle (in degrees) relative to horizontal
     // Can be positive or negative. Range checking in IK code
     if (abs(ly_trans) > JS_DEADBAND) {
-        ga_tmp += (ly_trans / JS_SCALE * Speed);
+        ga_tmp += ((float)ly_trans / JS_SCALE * Speed);
         arm_move = true;
     }
 
@@ -347,7 +347,7 @@ void loop()
     // Wrist rotate (in degrees)
     // Restrict to MIN/MAX range of servo
     if (abs(lx_trans) > JS_DEADBAND) {
-        WR += (lx_trans / JS_SCALE * Speed);
+        WR += ((float)lx_trans / JS_SCALE * Speed);
         WR = constrain(WR, WRO_MIN, WRO_MAX);
         Wro_Servo.write(WR);
     }
