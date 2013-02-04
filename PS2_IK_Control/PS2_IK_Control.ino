@@ -210,7 +210,7 @@ void setup()
     byte    ps2_stat;
     do {
 //        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, true, true);
-        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, false, false);
+        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN);
 #ifdef DEBUG
         if (ps2_stat == 1)
             Serial.println("No controller found. Re-trying ...");
@@ -241,6 +241,9 @@ void setup()
     delay(500);
     // Sound tone to indicate it's safe to turn on servo power
     tone(SPK_PIN, TONE_READY, TONE_DURATION);
+    delay(TONE_DURATION / 2);
+    tone(SPK_PIN, TONE_READY, TONE_DURATION);
+
 }
  
 void loop()
@@ -520,5 +523,6 @@ void servo_park(int park_type)
 
     return;
 }
+
 
 
