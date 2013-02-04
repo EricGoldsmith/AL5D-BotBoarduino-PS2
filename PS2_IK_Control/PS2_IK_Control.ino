@@ -137,7 +137,7 @@
 // Audible feedback sounds
 #define TONE_READY 1000     // Hz
 #define TONE_IK_ERROR 200   // Hz
-#define TONE_DURATION 200   // ms
+#define TONE_DURATION 100   // ms
  
 // IK function return values
 #define IK_SUCCESS 0
@@ -170,7 +170,7 @@ float G = READY_G;          // Gripper jaw opening.
 #ifdef  WRIST_ROTATE
 float WR = READY_WR;        // Wrist Rotate.
 #endif
-float Speed = SPEED_DEFAULT
+float Speed = SPEED_DEFAULT;
 
 // Pre-calculations
 float hum_sq = HUMERUS*HUMERUS;
@@ -209,7 +209,8 @@ void setup()
     //  GamePad(clock, command, attention, data, Pressures?, Rumble?)
     byte    ps2_stat;
     do {
-        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, true, true);
+//        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, true, true);
+        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, false, false);
 #ifdef DEBUG
         if (ps2_stat == 1)
             Serial.println("No controller found. Re-trying ...");
@@ -320,14 +321,14 @@ void loop()
     }
 
     // Fully open gripper
-    if (Ps2x.Button(PSB_BLUE)) {
+    if (Ps2x.ButtonPressed(PSB_BLUE)) {
         G = GRI_MIN;
         Gri_Servo.write(G);
     }
     
     // Speed increase/decrease
-    if (Ps2x.Button(PSB_PAD_UP) || Ps2x.Button(PSB_PAD_DOWN)) {
-        if (Ps2x.Button(PSB_PAD_UP))
+    if (Ps2x.ButtonPressed(PSB_PAD_UP) || Ps2x.ButtonPressed(PSB_PAD_DOWN)) {
+        if (Ps2x.ButtonPressed(PSB_PAD_UP))
             Speed += SPEED_INCREMENT;   // increase speed
         else
             Speed -= SPEED_INCREMENT;   // decrease speed
@@ -336,7 +337,7 @@ void loop()
         Speed = constrain(Speed, SPEED_MIN, SPEED_MAX);
         
         // Audible feedback
-        tone(SPK_PIN, (TONE_READY * Speed), TONE_DURATION/2);
+        tone(SPK_PIN, (TONE_READY * Speed), TONE_DURATION);
     }
     
 #ifdef WRIST_ROTATE
@@ -360,7 +361,7 @@ void loop()
             GA = ga_tmp;
         } else
             // Sound tone for audible feedback of error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION/2);
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
 #else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
@@ -371,7 +372,7 @@ void loop()
             GA = ga_tmp;
         } else
             // Sound tone for audible feedback of error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION/2);
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
 #endif
 
         // Reset the flag
