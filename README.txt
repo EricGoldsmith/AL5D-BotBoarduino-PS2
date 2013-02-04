@@ -23,6 +23,7 @@
 *       Left Joystick U/D:  Wrist angle
 *       L1/L2 Buttons:      Gripper close/open
 *       X Button:           Gripper fully open
+*       Digital Pad U/D:    Speed increase/decrease
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -33,9 +34,9 @@
 *       0.1 Initial port of code to use Arduino Server Library
 *       0.2 Added PS2 controls
 *       0.3 Added constraint logic & 2D kinematics
+*       0.4 Added control to modify speed of movement during program run
 *
 *    To Do
-*    - Add control to modify speed of movement during program run
 *    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
