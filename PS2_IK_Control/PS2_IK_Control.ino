@@ -241,7 +241,7 @@ void setup()
     delay(500);
     // Sound tone to indicate it's safe to turn on servo power
     tone(SPK_PIN, TONE_READY, TONE_DURATION);
-    delay(TONE_DURATION / 2);
+    delay(TONE_DURATION * 2);
     tone(SPK_PIN, TONE_READY, TONE_DURATION);
 
 }
