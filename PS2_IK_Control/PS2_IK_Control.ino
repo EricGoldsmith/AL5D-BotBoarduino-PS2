@@ -148,6 +148,8 @@
 #define PARK_READY 2        // Servos at Ready To Run positions
 
 // Ready To Run arm position
+// NOTE: Have the arm near this position before turning on the 
+// servo power to prevent whiplash
 #ifdef CYL_IK   // 2D kinematics
 #define READY_X (BAS_MID - 45.0)
 #else           // 3D kinematics
@@ -206,10 +208,8 @@ void setup()
 #endif
 
     // Setup PS2 controller pins and settings and check for error
-    //  GamePad(clock, command, attention, data, Pressures?, Rumble?)
     byte    ps2_stat;
     do {
-//        ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN, true, true);
         ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN);
 #ifdef DEBUG
         if (ps2_stat == 1)
