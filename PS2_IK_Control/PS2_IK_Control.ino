@@ -544,7 +544,8 @@ void servo_park(int park_type)
 // It turns out that the Arduino Servo library write() function only 
 // accepts 'int' degrees. If a 'float' value is passed in, it's
 // truncated, not rounded. So, the maximum servo positioning resolution
-// is whole degrees. Servos are capable of roughly 10x that resolution.
+// is whole degrees. Servos are capable of roughly 10x that resolution
+// via direct microsecond control.
 //
 // This function converts 'float' degrees to corresponding servo microseconds
 // to take advantage of this extra resolution.
@@ -554,10 +555,13 @@ int deg_to_us(float value)
     if (value < 0.0) value = 0.0;
     if (value > 180.0) value = 180.0;
     
-    // Take input and shift the decimal one position to the right
-    // (i.e. multiply by 10) to pick up the tenths of a degree. 
-    // Similarly scale the map input range. Output range is unchanged.
-    return(map(value*10, 0*10, 180*10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH));      
+    // Map degrees to microseconds, and round the result to a whole number
+    return(round(map_float(value, 0.0, 180.0, (float)MIN_PULSE_WIDTH, (float)MAX_PULSE_WIDTH)));      
 }
 
+// Same logic as native map() function, just operates on float instead of long
+float map_float(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return ((x - in_min) * (out_max - out_min) / (in_max - in_min)) + out_min;
+}
 
