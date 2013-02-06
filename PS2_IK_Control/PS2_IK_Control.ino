@@ -274,7 +274,8 @@ void loop()
         // of the gripper, based on gripper's distance from base
         X += ((float)rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
         X = constrain(X, BAS_MIN, BAS_MAX);
-        Bas_Servo.write(X);
+//        Bas_Servo.write(X);
+        Bas_Servo.writeMicroseconds(deg_to_us(X));
     }
 #else           // 3D kinematics
     // X Position (in mm)
@@ -320,13 +321,15 @@ void loop()
             G -= G_INCREMENT;   // open
             
         G = constrain(G, GRI_MIN, GRI_MAX);
-        Gri_Servo.write(G);
+//        Gri_Servo.write(G);
+        Gri_Servo.writeMicroseconds(deg_to_us(G));
     }
 
     // Fully open gripper
     if (Ps2x.ButtonPressed(PSB_BLUE)) {
         G = GRI_MIN;
-        Gri_Servo.write(G);
+//        Gri_Servo.write(G);
+        Gri_Servo.writeMicroseconds(deg_to_us(G));
     }
     
     // Speed increase/decrease
@@ -349,7 +352,8 @@ void loop()
     if (abs(lx_trans) > JS_DEADBAND) {
         WR += ((float)lx_trans / JS_SCALE * Speed);
         WR = constrain(WR, WRO_MIN, WRO_MAX);
-        Wro_Servo.write(WR);
+//        Wro_Servo.write(WR);
+        Wro_Servo.writeMicroseconds(deg_to_us(WR));
     }
 #endif
 
@@ -452,11 +456,15 @@ int set_arm(float x, float y, float z, float grip_angle_d)
 #ifdef CYL_IK   // 2D kinematics
     // Do not control base servo
 #else           // 3D kinematics
-    Bas_Servo.write(bas_pos);
+//    Bas_Servo.write(bas_pos);
+    Bas_Servo.writeMicroseconds(deg_to_us(bas_pos));
 #endif
-    Shl_Servo.write(shl_pos);
-    Elb_Servo.write(elb_pos);
-    Wri_Servo.write(wri_pos);
+//    Shl_Servo.write(shl_pos);
+    Shl_Servo.writeMicroseconds(deg_to_us(shl_pos));
+//    Elb_Servo.write(elb_pos);
+    Elb_Servo.writeMicroseconds(deg_to_us(elb_pos));
+//    Wri_Servo.write(wri_pos);
+    Wri_Servo.writeMicroseconds(deg_to_us(wri_pos));
 
 #ifdef DEBUG
     Serial.print("X: ");
@@ -496,13 +504,19 @@ void servo_park(int park_type)
     switch (park_type) {
         // All servos at midpoint
         case PARK_MIDPOINT:
-            Bas_Servo.write(BAS_MID);
-            Shl_Servo.write(SHL_MID);
-            Elb_Servo.write(ELB_MID);
-            Wri_Servo.write(WRI_MID);
-            Gri_Servo.write(GRI_MID);
+//            Bas_Servo.write(BAS_MID);
+            Bas_Servo.writeMicroseconds(deg_to_us(BAS_MID));
+//            Shl_Servo.write(SHL_MID);
+            Shl_Servo.writeMicroseconds(deg_to_us(SHL_MID));
+//            Elb_Servo.write(ELB_MID);
+            Elb_Servo.writeMicroseconds(deg_to_us(ELB_MID));
+//            Wri_Servo.write(WRI_MID);
+            Wri_Servo.writeMicroseconds(deg_to_us(WRI_MID));
+//            Gri_Servo.write(GRI_MID);
+            Gri_Servo.writeMicroseconds(deg_to_us(GRI_MID));
 #ifdef WRIST_ROTATE
-            Wro_Servo.write(WRO_MID);
+//            Wro_Servo.write(WRO_MID);
+            Wro_Servo.writeMicroseconds(deg_to_us(WRO_MID));
 #endif
             break;
         
@@ -510,13 +524,16 @@ void servo_park(int park_type)
         case PARK_READY:
 #ifdef CYL_IK   // 2D kinematics
             set_arm(0.0, READY_Y, READY_Z, READY_GA);
-            Bas_Servo.write(READY_X);
+//            Bas_Servo.write(READY_X);
+            Bas_Servo.writeMicroseconds(deg_to_us(READY_X));
 #else           // 3D kinematics
             set_arm(READY_X, READY_Y, READY_Z, READY_GA);
 #endif
-            Gri_Servo.write(READY_G);
+//            Gri_Servo.write(READY_G);
+            Gri_Servo.writeMicroseconds(deg_to_us(READY_G));
 #ifdef WRIST_ROTATE
-            Wro_Servo.write(READY_WR);
+//            Wro_Servo.write(READY_WR);
+            Wro_Servo.writeMicroseconds(deg_to_us(READY_WR));
 #endif
             break;
     }
@@ -524,5 +541,23 @@ void servo_park(int park_type)
     return;
 }
 
+// It turns out that the Arduino Servo library write() function only 
+// accepts 'int' degrees. If a 'float' value is passed in, it's
+// truncated, not rounded. So, the maximum servo positioning resolution
+// is whole degrees. Servos are capable of roughly 10x that resolution.
+//
+// This function converts 'float' degrees to corresponding servo microseconds
+// to take advantage of this extra resolution.
+int deg_to_us(float value)
+{
+    // Apply basic constraints
+    if (value < 0.0) value = 0.0;
+    if (value > 180.0) value = 180.0;
+    
+    // Take input and shift the decimal one position to the right
+    // (i.e. multiply by 10) to pick up the tenths of a degree. 
+    // Similarly scale the map input range. Output range is unchanged.
+    return(map(value*10, 0*10, 180*10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH));      
+}
 
 
