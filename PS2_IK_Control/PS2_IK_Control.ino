@@ -132,9 +132,9 @@
 #define SPEED_DEFAULT 1.0
 #define SPEED_INCREMENT 0.25
 
-// Practical navigation limit. 
-// Not enforced on controller input (IK code constrains to servo limits), 
-// but used for CLV calculation for base rotation in 2D mode. 
+// Practical navigation limit.
+// Enforced on controller input, and used for CLV calculation 
+// for base rotation in 2D mode. 
 #define Y_MIN 100.0         // mm
 
 // PS2 controller characteristics
@@ -162,7 +162,7 @@
 // NOTE: Have the arm near this position before turning on the 
 //       servo power to prevent whiplash
 #ifdef CYL_IK   // 2D kinematics
-#define READY_X (BAS_MID - 45.0)
+#define READY_BA (BAS_MID - 45.0)
 #else           // 3D kinematics
 #define READY_X 0.0
 #endif
@@ -175,8 +175,11 @@
 #endif
 
 // Global variables for arm position, and initial settings
-float X = READY_X;          // For 2D kinematics: servo angle degrees - 0 is fully CCW
-                            // For 3D kinematics: Left/right distance (mm) from base centerline - 0 is straight
+#ifdef CYL_IK   // 2D kinematics
+float BA = READY_BA         // Base angle. Servo degrees - 0 is fully CCW
+#else           // 3D kinematics
+float X = READY_X;          // Left/right distance (mm) from base centerline - 0 is straight
+#endif
 float Y = READY_Y;          // Distance (mm) out from base center
 float Z = READY_Z;          // Height (mm) from surface (i.e. X/Y plane)
 float GA = READY_GA;        // Gripper angle. Servo degrees, relative to X/Y plane - 0 is horizontal
@@ -261,14 +264,14 @@ void setup()
 void loop()
 {
     // Store desired position in tmp variables until confirmed by set_arm() logic
+#ifdef CYL_IK   // 2D kinematics
+    // not used
+#else           // 3D kinematics
     float x_tmp = X;
+#endif
     float y_tmp = Y;
     float z_tmp = Z;
     float ga_tmp = GA;
-    float g_tmp = G;
-#ifdef WRIST_ROTATE
-    float wr_tmp = WR;
-#endif
     
     // Used to indidate whether an input occurred that can move the arm
     boolean arm_move = false;
@@ -287,14 +290,13 @@ void loop()
     // Restrict to MIN/MAX range of servo
     if (abs(rx_trans) > JS_DEADBAND) {
         // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
-        // of the gripper as it moves farther from base
-        x_tmp += ((float)rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
-        X = constrain(x_tmp, BAS_MIN, BAS_MAX);
-        if (X == x_tmp) {
-            // Value within constraints
-            Bas_Servo.writeMicroseconds(deg_to_us(X));
-        } else {
-            // Sound tone for audible feedback of error
+        // of the gripper as its distance from the base increases
+        BA += ((float)rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
+        BA = constrain(BA, BAS_MIN, BAS_MAX);
+        Bas_Servo.writeMicroseconds(deg_to_us(BA));
+
+        if (BA == BAS_MIN || BA == BAS_MAX) {
+            // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
         }
     }
@@ -311,8 +313,13 @@ void loop()
     // Must be positive. Servo range checking in IK code
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += ((float)ry_trans / JS_IK_SCALE * Speed);
-        y_tmp = max(y_tmp, 0);
+        y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
+        
+        if (y_tmp == Y_MIN) {
+            // Provide audible feedback of reaching limit
+            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+        }
     }
 
     // Z Position (in mm)
@@ -330,7 +337,7 @@ void loop()
     // Gripper angle (in degrees) relative to horizontal
     // Can be positive or negative. Servo range checking in IK code
     if (abs(ly_trans) > JS_DEADBAND) {
-        ga_tmp += ((float)ly_trans / JS_SCALE * Speed);
+        ga_tmp -= ((float)ly_trans / JS_SCALE * Speed);
         arm_move = true;
     }
 
@@ -338,16 +345,15 @@ void loop()
     // Restrict to MIN/MAX range of servo
     if (Ps2x.Button(PSB_L1) || Ps2x.Button(PSB_L2)) {
         if (Ps2x.Button(PSB_L1)) {
-            g_tmp += G_INCREMENT;   // close
+            G += G_INCREMENT;   // close
         } else {
-            g_tmp -= G_INCREMENT;   // open
+            G -= G_INCREMENT;   // open
         }
-        G = constrain(g_tmp, GRI_MIN, GRI_MAX);
-        if (G == g_tmp) {
-            // Value within constraints
-            Gri_Servo.writeMicroseconds(deg_to_us(G));
-        } else {
-            // Sound tone for audible feedback of error
+        G = constrain(G, GRI_MIN, GRI_MAX);
+        Gri_Servo.writeMicroseconds(deg_to_us(G));
+
+        if (G == GRI_MIN || X == GRI_MAX) {
+            // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
         }
     }
@@ -376,13 +382,12 @@ void loop()
     // Wrist rotate (in degrees)
     // Restrict to MIN/MAX range of servo
     if (abs(lx_trans) > JS_DEADBAND) {
-        wr_tmp += ((float)lx_trans / JS_SCALE * Speed);
-        WR = constrain(wr_tmp, WRO_MIN, WRO_MAX);
-        if (WR == wr_tmp) {
-            // Value within constraints
-            Wro_Servo.writeMicroseconds(deg_to_us(WR));
-        } else {
-            // Sound tone for audible feedback of error
+        WR += ((float)lx_trans / JS_SCALE * Speed);
+        WR = constrain(WR, WRO_MIN, WRO_MAX);
+        Wro_Servo.writeMicroseconds(deg_to_us(WR));
+
+        if (WR == WRO_MIN || WR == WRO_MAX) {
+            // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
         }
     }
@@ -439,8 +444,8 @@ int set_arm(float x, float y, float z, float grip_angle_d)
     y = rdist;
     
     // Grip offsets calculated based on grip angle
-    float grip_off_z = (sin( grip_angle_r)) * GRIPPER;
-    float grip_off_y = (cos( grip_angle_r)) * GRIPPER;
+    float grip_off_z = (sin(grip_angle_r)) * GRIPPER;
+    float grip_off_y = (cos(grip_angle_r)) * GRIPPER;
     
     // Wrist position
     float wrist_z = (z - grip_off_z) - BASE_HGT;
@@ -547,7 +552,7 @@ void servo_park(int park_type)
         case PARK_READY:
 #ifdef CYL_IK   // 2D kinematics
             set_arm(0.0, READY_Y, READY_Z, READY_GA);
-            Bas_Servo.writeMicroseconds(deg_to_us(READY_X));
+            Bas_Servo.writeMicroseconds(deg_to_us(READY_BA));
 #else           // 3D kinematics
             set_arm(READY_X, READY_Y, READY_Z, READY_GA);
 #endif
