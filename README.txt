@@ -35,6 +35,8 @@
 *       0.2 Added PS2 controls
 *       0.3 Added constraint logic & 2D kinematics
 *       0.4 Added control to modify speed of movement during program run
+*       0.5 Write to servos directly in microseconds to improve resolution
+*           Should be accurate to ~1/2 a degree
 *
 *    To Do
 *    - Improve arm parking logic to gently move to park position
