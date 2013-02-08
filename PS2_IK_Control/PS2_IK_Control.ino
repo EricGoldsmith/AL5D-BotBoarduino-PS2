@@ -56,6 +56,12 @@
 #include <Servo.h>
 #include <PS2X_lib.h>
 
+int dummy;                  // Defining this dummy variable to work around a bug in the
+                            // IDE (1.0.3) pre-processor that messes up #ifdefs
+                            // More info: http://code.google.com/p/arduino/issues/detail?id=906
+                            //            http://code.google.com/p/arduino/issues/detail?id=987
+                            //            http://arduino.cc/forum/index.php/topic,125769.0.html
+
 //#define DEBUG             // Uncomment to turn on debugging output
 
 #define CYL_IK              // Apply only 2D, or cylindrical, kinematics. The X-axis component is
@@ -77,7 +83,7 @@
 #define WRI_SERVO_PIN 10    // Wrist servo HS-645MG
 #define GRI_SERVO_PIN 11    // Gripper servo HS-422
 #ifdef WRIST_ROTATE
-#define WRO_SERVO_PIN 12    // Wrist rotate servo HS-485HB
+ #define WRO_SERVO_PIN 12   // Wrist rotate servo HS-485HB
 #endif
 
 // Arduino pin numbers for PS2 controller connections
@@ -120,9 +126,9 @@
 #define GRI_MAX 165.0       // Fully closed
 
 #ifdef WRIST_ROTATE
-#define WRO_MIN 0.0
-#define WRO_MID 90.0
-#define WRO_MAX 180.0
+ #define WRO_MIN 0.0
+ #define WRO_MID 90.0
+ #define WRO_MAX 180.0
 #endif
 
 // Speed adjustment parameters
@@ -162,30 +168,30 @@
 // NOTE: Have the arm near this position before turning on the 
 //       servo power to prevent whiplash
 #ifdef CYL_IK   // 2D kinematics
-#define READY_BA (BAS_MID - 45.0)
+ #define READY_BA (BAS_MID - 45.0)
 #else           // 3D kinematics
-#define READY_X 0.0
+ #define READY_X 0.0
 #endif
 #define READY_Y 170.0
 #define READY_Z 45.0
 #define READY_GA 0.0
 #define READY_G GRI_MID
 #ifdef  WRIST_ROTATE
-#define READY_WR WRO_MID
+ #define READY_WR WRO_MID
 #endif
 
 // Global variables for arm position, and initial settings
 #ifdef CYL_IK   // 2D kinematics
-float BA = READY_BA         // Base angle. Servo degrees - 0 is fully CCW
+ float BA = READY_BA;       // Base angle. Servo degrees - 0 is fully CCW
 #else           // 3D kinematics
-float X = READY_X;          // Left/right distance (mm) from base centerline - 0 is straight
+ float X = READY_X;         // Left/right distance (mm) from base centerline - 0 is straight
 #endif
 float Y = READY_Y;          // Distance (mm) out from base center
 float Z = READY_Z;          // Height (mm) from surface (i.e. X/Y plane)
 float GA = READY_GA;        // Gripper angle. Servo degrees, relative to X/Y plane - 0 is horizontal
 float G = READY_G;          // Gripper jaw opening. Servo degrees - midpoint is halfway open
 #ifdef  WRIST_ROTATE
-float WR = READY_WR;        // Wrist Rotate. Servo degrees - midpoint is horizontal
+ float WR = READY_WR;       // Wrist Rotate. Servo degrees - midpoint is horizontal
 #endif
 float Speed = SPEED_DEFAULT;
 
@@ -203,7 +209,7 @@ Servo   Elb_Servo;
 Servo   Wri_Servo;
 Servo   Gri_Servo;
 #ifdef WRIST_ROTATE
-Servo   Wro_Servo;
+ Servo   Wro_Servo;
 #endif
  
 void setup()
@@ -352,7 +358,7 @@ void loop()
         G = constrain(G, GRI_MIN, GRI_MAX);
         Gri_Servo.writeMicroseconds(deg_to_us(G));
 
-        if (G == GRI_MIN || X == GRI_MAX) {
+        if (G == GRI_MIN || G == GRI_MAX) {
             // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
         }
