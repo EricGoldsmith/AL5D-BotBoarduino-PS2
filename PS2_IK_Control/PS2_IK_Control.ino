@@ -95,16 +95,20 @@ int dummy;                  // Defining this dummy variable to work around a bug
 // Arduino pin number of on-board speaker
 #define SPK_PIN 5
 
-// Define microsecond limits for servos - applied uniformly to all servos
-// Range of 1800 microseconds maps evenly to 180 degrees
+// Define generic range limits for servos, in microseconds (us) and degrees (deg)
+// Used to map range of 180 deg to 1800 us (native servo units).
+// Specific per-servo/joint limits are defined below
 #define SERVO_MIN_US 600
 #define SERVO_MID_US 1500
 #define SERVO_MAX_US 2400
+#define SERVO_MIN_DEG 0.0
+#define SERVO_MID_DEG 90.0
+#define SERVO_MAX_DEG 180.0
 
-// Set physical limits (in degrees) per servo.
-// Will vary for each servo, depending on mechanical range of motion.
+// Set physical limits (in degrees) per servo/joint.
+// Will vary for each servo/joint, depending on mechanical range of motion.
 // The MID setting is the required servo input needed to achieve a 
-// 90 degree arm angle, to allow compensation for horn misalignment
+// 90 degree joint angle, to allow compensation for horn misalignment
 #define BAS_MIN 0.0         // Fully CCW
 #define BAS_MID 90.0
 #define BAS_MAX 180.0       // Fully CW
@@ -316,7 +320,7 @@ void loop()
 #endif
 
     // Y Position (in mm)
-    // Must be positive. Servo range checking in IK code
+    // Must be > Y_MIN. Servo range checking in IK code
     if (abs(ry_trans) > JS_DEADBAND) {
         y_tmp += ((float)ry_trans / JS_IK_SCALE * Speed);
         y_tmp = max(y_tmp, Y_MIN);
@@ -433,9 +437,9 @@ void loop()
     delay(10);
  }
  
-// Arm positioning routine utilizing inverse kinematics
-// Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive
-// Input dimensions are for the gripper, just short of its tip, where it grabs things
+// Arm positioning routine utilizing Inverse Kinematics.
+// Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive.
+// Input dimensions are for the gripper, just short of its tip, where it grabs things.
 // If resulting arm position is physically unreachable, return error code.
 int set_arm(float x, float y, float z, float grip_angle_d)
 {
@@ -572,22 +576,20 @@ void servo_park(int park_type)
     return;
 }
 
-// It turns out that the Arduino Servo library .write() function only 
-// accepts 'int' degrees. If a 'float' value is passed in, it's
-// truncated, not rounded. So, the maximum servo positioning resolution
-// is whole degrees. Servos are capable of roughly 2x that resolution
-// via direct microsecond control.
+// The Arduino Servo library .write() function accepts 'int' degrees, meaning
+// maximum servo positioning resolution is whole degrees. Servos are capable 
+// of roughly 2x that resolution via direct microsecond control.
 //
 // This function converts 'float' (i.e. decimal) degrees to corresponding 
 // servo microseconds to take advantage of this extra resolution.
 int deg_to_us(float value)
 {
     // Apply basic constraints
-    if (value < 0.0) value = 0.0;
-    if (value > 180.0) value = 180.0;
+    if (value < SERVO_MIN_DEG) value = SERVO_MIN_DEG;
+    if (value > SERVO_MAX_DEG) value = SERVO_MAX_DEG;
     
     // Map degrees to microseconds, and round the result to a whole number
-    return(round(map_float(value, 0.0, 180.0, (float)SERVO_MIN_US, (float)SERVO_MAX_US)));      
+    return(round(map_float(value, SERVO_MIN_DEG, SERVO_MAX_DEG, (float)SERVO_MIN_US, (float)SERVO_MAX_US)));      
 }
 
 // Same logic as native map() function, just operates on float instead of long
