@@ -157,45 +157,43 @@ int dummy;                  // Defining this dummy variable to work around a bug
 
 // Audible feedback sounds
 #define TONE_READY 1000     // Hz
-#define TONE_IK_ERROR 200   // Hz
+#define TONE_RANGE_ERROR 200   // Hz
 #define TONE_DURATION 100   // ms
  
 // IK function return values
 #define IK_SUCCESS 0
 #define IK_ERROR 1          // Desired position not possible
 
-// Arm parking positions
-#define PARK_MIDPOINT 1     // Servos at midpoints
-#define PARK_READY 2        // Arm at Ready-To-Run position
-
-// Ready-To-Run arm position. See descriptions below
+// Arm Park position (see variable descriptions below).
+// These values place the arm in a 'rest' position:
+// Base centered, shoulder and elbow at 90 deg, wrist horizontal.
 // NOTE: Have the arm near this position before turning on the 
 //       servo power to prevent whiplash
 #ifdef CYL_IK   // 2D kinematics
- #define READY_BA (BAS_MID - 45.0)
+ #define PARK_BA BAS_MID
 #else           // 3D kinematics
- #define READY_X 0.0
+ #define PARK_X 0.0
 #endif
-#define READY_Y 170.0
-#define READY_Z 45.0
-#define READY_GA 0.0
-#define READY_G GRI_MID
+#define PARK_Y 400.0
+#define PARK_Z 345.0
+#define PARK_GA 0.0
+#define PARK_G GRI_MID
 #ifdef  WRIST_ROTATE
- #define READY_WR WRO_MID
+ #define PARK_WR WRO_MID
 #endif
 
 // Global variables for arm position, and initial settings
 #ifdef CYL_IK   // 2D kinematics
- float BA = READY_BA;       // Base angle. Servo degrees - 0 is fully CCW
+ float BA = PARK_BA;       // Base angle. Servo degrees - 0 is fully CCW
 #else           // 3D kinematics
- float X = READY_X;         // Left/right distance (mm) from base centerline - 0 is straight
+ float X = PARK_X;         // Left/right distance (mm) from base centerline - 0 is straight
 #endif
-float Y = READY_Y;          // Distance (mm) out from base center
-float Z = READY_Z;          // Height (mm) from surface (i.e. X/Y plane)
-float GA = READY_GA;        // Gripper angle. Servo degrees, relative to X/Y plane - 0 is horizontal
-float G = READY_G;          // Gripper jaw opening. Servo degrees - midpoint is halfway open
+float Y = PARK_Y;          // Distance (mm) out from base center
+float Z = PARK_Z;          // Height (mm) from surface (i.e. X/Y plane)
+float GA = PARK_GA;        // Gripper angle. Servo degrees, relative to X/Y plane - 0 is horizontal
+float G = PARK_G;          // Gripper jaw opening. Servo degrees - midpoint is halfway open
 #ifdef  WRIST_ROTATE
- float WR = READY_WR;       // Wrist Rotate. Servo degrees - midpoint is horizontal
+ float WR = PARK_WR;       // Wrist Rotate. Servo degrees - midpoint is horizontal
 #endif
 float Speed = SPEED_DEFAULT;
 
@@ -232,7 +230,7 @@ void setup()
     Wro_Servo.attach(WRO_SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
 #endif
 
-    // Setup PS2 controller. Loop until ready.
+    // Setup PS2 controller. Loop until controller configured successfully.
     byte    ps2_stat;
     do {
         ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN);
@@ -257,7 +255,7 @@ void setup()
 #endif
 
     // NOTE: Ensure arm is close to the desired park position before turning on servo power!
-    servo_park(PARK_READY);
+    servo_park();
 
 #ifdef DEBUG
     Serial.println("Start");
@@ -307,7 +305,7 @@ void loop()
 
         if (BA == BAS_MIN || BA == BAS_MAX) {
             // Provide audible feedback of reaching limit
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 #else           // 3D kinematics
@@ -328,7 +326,7 @@ void loop()
         
         if (y_tmp == Y_MIN) {
             // Provide audible feedback of reaching limit
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 
@@ -364,7 +362,7 @@ void loop()
 
         if (G == GRI_MIN || G == GRI_MAX) {
             // Provide audible feedback of reaching limit
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 
@@ -398,7 +396,7 @@ void loop()
 
         if (WR == WRO_MIN || WR == WRO_MAX) {
             // Provide audible feedback of reaching limit
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 #endif
@@ -414,7 +412,7 @@ void loop()
             GA = ga_tmp;
         } else {
             // Sound tone for audible feedback of error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
 #else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
@@ -426,7 +424,7 @@ void loop()
             GA = ga_tmp;
         } else {
             // Sound tone for audible feedback of error
-            tone(SPK_PIN, TONE_IK_ERROR, TONE_DURATION);
+            tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
 #endif
 
@@ -543,35 +541,24 @@ int set_arm(float x, float y, float z, float grip_angle_d)
 }
  
 // Move servos to parking position
-void servo_park(int park_type)
+void servo_park()
 {
-    switch (park_type) {
-        // All servos at midpoint
-        case PARK_MIDPOINT:
-            Bas_Servo.writeMicroseconds(deg_to_us(BAS_MID));
-            Shl_Servo.writeMicroseconds(deg_to_us(SHL_MID));
-            Elb_Servo.writeMicroseconds(deg_to_us(ELB_MID));
-            Wri_Servo.writeMicroseconds(deg_to_us(WRI_MID));
-            Gri_Servo.writeMicroseconds(deg_to_us(GRI_MID));
-#ifdef WRIST_ROTATE
-            Wro_Servo.writeMicroseconds(deg_to_us(WRO_MID));
-#endif
-            break;
-        
-        // Ready-To-Run position
-        case PARK_READY:
 #ifdef CYL_IK   // 2D kinematics
-            set_arm(0.0, READY_Y, READY_Z, READY_GA);
-            Bas_Servo.writeMicroseconds(deg_to_us(READY_BA));
+    set_arm(0.0, PARK_Y, PARK_Z, PARK_GA);
+    Bas_Servo.writeMicroseconds(deg_to_us(PARK_BA));
 #else           // 3D kinematics
-            set_arm(READY_X, READY_Y, READY_Z, READY_GA);
+    set_arm(PARK_X, PARK_Y, PARK_Z, PARK_GA);
 #endif
-            Gri_Servo.writeMicroseconds(deg_to_us(READY_G));
+    Gri_Servo.writeMicroseconds(deg_to_us(PARK_G));
 #ifdef WRIST_ROTATE
-            Wro_Servo.writeMicroseconds(deg_to_us(READY_WR));
+    Wro_Servo.writeMicroseconds(deg_to_us(PARK_WR));
 #endif
-            break;
-    }
+
+// Proposed Ready-To-Run position
+// X = 45 deg
+// Y = 125 mm
+// Z = 25 mm
+// GA = -90 deg
 
     return;
 }
