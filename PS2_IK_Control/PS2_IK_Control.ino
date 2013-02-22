@@ -267,7 +267,7 @@ void setup()
     delay(TONE_DURATION * 2);
     tone(SPK_PIN, TONE_READY, TONE_DURATION);
 
-}
+} // end setup()
  
 void loop()
 {
@@ -433,7 +433,7 @@ void loop()
     }
 
     delay(10);
- }
+ } // end loop()
  
 // Arm positioning routine utilizing Inverse Kinematics.
 // Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive.
@@ -538,7 +538,7 @@ int set_arm(float x, float y, float z, float grip_angle_d)
 #endif
 
     return IK_SUCCESS;
-}
+} // end set_arm()
  
 // Move servos to parking position
 void servo_park()
@@ -561,7 +561,7 @@ void servo_park()
 // GA = -90 deg
 
     return;
-}
+} // end servo_park()
 
 // The Arduino Servo library .write() function accepts 'int' degrees, meaning
 // maximum servo positioning resolution is whole degrees. Servos are capable 
@@ -577,10 +577,76 @@ int deg_to_us(float value)
     
     // Map degrees to microseconds, and round the result to a whole number
     return(round(map_float(value, SERVO_MIN_DEG, SERVO_MAX_DEG, (float)SERVO_MIN_US, (float)SERVO_MAX_US)));      
-}
+} // end deg_to_us()
 
 // Same logic as native map() function, just operates on float instead of long
 float map_float(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return ((x - in_min) * (out_max - out_min) / (in_max - in_min)) + out_min;
-}
+} // end map_float()
+
+// Max linear movement, in mm
+#define MAX_LINEAR_DELTA 10.0
+// Max angular movement, in degrees
+#define MAX_ANGULAR_DELTA 2.0
+
+// Move the arm from its current position to a target (*_t) position
+// Stage the movement so that whiplash does not occur from moving too rapidly,
+// and no joint or position limits are exceeded.
+void move_arm_to(float x_target, float y_target, float z_target, float ga_target)
+{
+    float x_tmp = X;
+    float y_tmp = Y;
+    float z_tmp = Z;
+    float ga_tmp = GA;
+    
+    boolean done = false;
+    
+    while (!done) {
+        // Determine the deltas
+        float x_delta = x_target - X;
+        float y_delta = y_target - Y;
+        float z_delta = z_target - Z;
+        float ga_delta = ga_target - GA;
+    
+        // Move the max amount per iteration
+        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA) {
+            x_tmp = += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+        } else {
+            x_tmp = += x_delta;
+        }
+
+        if (y_delta && abs(y_delta) > MAX_LINEAR_DELTA) {
+            y_tmp = += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+        } else {
+            y_tmp = += y_delta;
+        }
+
+        if (z_delta && abs(z_delta) > MAX_LINEAR_DELTA) {
+            z_tmp = += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+        } else {
+            z_tmp = += z_delta;
+        }
+
+        if (ga_delta && abs(ga_delta) > MAX_ANGULAR_DELTA) {
+            ga_tmp = += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
+        } else {
+            ga_tmp = += ga_delta;
+        }
+        
+        // Move the arm
+        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
+            // If the arm was positioned successfully, record
+            // the new vales. Otherwise, ignore them.
+            X = x_tmp;
+            Y = y_tmp;
+            Z = z_tmp;
+            GA = ga_tmp;
+        }
+
+        // If target position, we're done
+        if ((X == x_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) {
+            done = true;
+        }
+    } // end while (!done)
+} // end move_arm_to()
