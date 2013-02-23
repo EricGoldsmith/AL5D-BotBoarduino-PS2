@@ -406,7 +406,7 @@ void loop()
 #ifdef CYL_IK   // 2D kinematics
         if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
-            // the new vales. Otherwise, ignore them.
+            // the new values. Otherwise, ignore them.
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
@@ -417,7 +417,7 @@ void loop()
 #else           // 3D kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
-            // the new vales. Otherwise, ignore them.
+            // the new values. Otherwise, ignore them.
             X = x_tmp;
             Y = y_tmp;
             Z = z_tmp;
@@ -593,9 +593,15 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
 // Move the arm from its current position to a target (*_t) position
 // Stage the movement so that whiplash does not occur from moving too rapidly,
 // and no joint or position limits are exceeded.
-void move_arm_to(float x_target, float y_target, float z_target, float ga_target)
-{
+#ifdef CYL_IK   // 2D kinematics
+ void move_arm_to(float ba_target, float y_target, float z_target, float ga_target)
+ {
+    float ba_tmp = BA;
+#else           // 3d kinematics
+ void move_arm_to(float x_target, float y_target, float z_target, float ga_target)
+ {
     float x_tmp = X;
+#endif
     float y_tmp = Y;
     float z_tmp = Z;
     float ga_tmp = GA;
@@ -603,50 +609,88 @@ void move_arm_to(float x_target, float y_target, float z_target, float ga_target
     boolean done = false;
     
     while (!done) {
-        // Determine the deltas
+
+#ifdef CYL_IK   // 2D kinematics
+        // Determine the delta
+        float ba_delta = ba_target - BA;
+
+        // Move the max amount per iteration
+        if (ba_delta && abs(ba_delta) > MAX_ANGULAR_DELTA) {
+            ba_tmp += (ba_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
+        } else {
+            ba_tmp += ba_delta;
+        }
+#else           // 3d kinematics
+        // Determine the delta
         float x_delta = x_target - X;
+        
+        // Move the max amount per iteration
+        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA) {
+            x_tmp += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+        } else {
+            x_tmp += x_delta;
+        }
+#endif
+        // Determine the deltas
         float y_delta = y_target - Y;
         float z_delta = z_target - Z;
         float ga_delta = ga_target - GA;
     
         // Move the max amount per iteration
-        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA) {
-            x_tmp = += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
-        } else {
-            x_tmp = += x_delta;
-        }
-
         if (y_delta && abs(y_delta) > MAX_LINEAR_DELTA) {
-            y_tmp = += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            y_tmp += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else {
-            y_tmp = += y_delta;
+            y_tmp += y_delta;
         }
 
+        // Move the max amount per iteration
         if (z_delta && abs(z_delta) > MAX_LINEAR_DELTA) {
-            z_tmp = += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            z_tmp += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else {
-            z_tmp = += z_delta;
+            z_tmp += z_delta;
         }
 
+        // Move the max amount per iteration
         if (ga_delta && abs(ga_delta) > MAX_ANGULAR_DELTA) {
-            ga_tmp = += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
+            ga_tmp += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
         } else {
-            ga_tmp = += ga_delta;
+            ga_tmp += ga_delta;
         }
         
         // Move the arm
+#ifdef CYL_IK   // 2D kinematics
+        BA = constrain(ba_tmp, BAS_MIN, BAS_MAX);
+        Bas_Servo.writeMicroseconds(deg_to_us(BA));
+
+        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
+            // If the arm was positioned successfully, record
+            // the new values. Otherwise, ignore them.
+            Y = y_tmp;
+            Z = z_tmp;
+            GA = ga_tmp;
+        }
+#else           // 3d kinematics
         if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
             // If the arm was positioned successfully, record
-            // the new vales. Otherwise, ignore them.
+            // the new values. Otherwise, ignore them.
             X = x_tmp;
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
         }
+#endif
+        
+        delay(10);
 
         // If target position, we're done
+#ifdef CYL_IK   // 2D kinematics
+        if ((BA == ba_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) {
+            done = true;
+        }
+#else           // 3d kinematics
         if ((X == x_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) {
             done = true;
         }
+#endif
     } // end while (!done)
 } // end move_arm_to()
