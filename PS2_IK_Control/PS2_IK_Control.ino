@@ -37,9 +37,8 @@
 *       0.4 Added control to modify speed of movement during program run
 *       0.5 Write to servos directly in microseconds to improve resolution
 *           Should be accurate to ~1/2 a degree
+*       0.6 Added ability to move arm to pre-defined hotspots with button press
 *
-*    To Do
-*    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -232,7 +231,8 @@ void setup()
 
     // Setup PS2 controller. Loop until controller configured successfully.
     byte    ps2_stat;
-    do {
+    do
+    {
         ps2_stat = Ps2x.config_gamepad(PS2_CLK_PIN, PS2_CMD_PIN, PS2_ATT_PIN, PS2_DAT_PIN);
 #ifdef DEBUG
         if (ps2_stat == 1)
@@ -241,7 +241,8 @@ void setup()
     } while (ps2_stat == 1);
  
 #ifdef DEBUG
-    switch (ps2_stat) {
+    switch (ps2_stat)
+    {
         case 0:
             Serial.println("Found Controller, configured successfully.");
             break;
@@ -285,6 +286,24 @@ void loop()
     boolean arm_move = false;
 
     Ps2x.read_gamepad();        //read controller
+    
+    //If one of the 'hot-spot' buttons was pressed move the arm there
+    if (Ps2x.ButtonPressed(PSB_START) || Ps2x.ButtonPressed(PSB_RED) || Ps2x.ButtonPressed(PSB_PINK) || Ps2x.ButtonPressed(PSB_GREEN))
+    {
+        if (Ps2x.ButtonPressed(PSB_START))
+        {    // Ready-To-Run position
+            move_arm_to(45, 125, 25, 0);
+        }
+        else if (Ps2x.ButtonPressed(PSB_PINK))
+        {    // West goal
+        }
+        else if (Ps2x.ButtonPressed(PSB_GREEN))
+        {   // North goal
+        }
+        else
+        {   // East goal
+        }
+    }
 
     // Read the left and right joysticks and translate the 
     // normal range of values (0-255) to zero-centered values (-128 - 128)
@@ -296,22 +315,23 @@ void loop()
 #ifdef CYL_IK   // 2D kinematics
     // Base Position (in degrees)
     // Restrict to MIN/MAX range of servo
-    if (abs(rx_trans) > JS_DEADBAND) {
-        // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
+    if (abs(rx_trans) > JS_DEADBAND)
+    {   // Muliplyting by the ratio (Y_MIN/Y) is to ensure constant linear velocity
         // of the gripper as its distance from the base increases
         BA += ((float)rx_trans / JS_SCALE * Speed * (Y_MIN/Y));
         BA = constrain(BA, BAS_MIN, BAS_MAX);
         Bas_Servo.writeMicroseconds(deg_to_us(BA));
 
-        if (BA == BAS_MIN || BA == BAS_MAX) {
-            // Provide audible feedback of reaching limit
+        if (BA == BAS_MIN || BA == BAS_MAX)
+        {   // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 #else           // 3D kinematics
     // X Position (in mm)
     // Can be positive or negative. Servo range checking in IK code
-    if (abs(rx_trans) > JS_DEADBAND) {
+    if (abs(rx_trans) > JS_DEADBAND)
+    {
         x_tmp += ((float)rx_trans / JS_IK_SCALE * Speed);
         arm_move = true;
     }
@@ -319,24 +339,28 @@ void loop()
 
     // Y Position (in mm)
     // Must be > Y_MIN. Servo range checking in IK code
-    if (abs(ry_trans) > JS_DEADBAND) {
+    if (abs(ry_trans) > JS_DEADBAND)
+    {
         y_tmp += ((float)ry_trans / JS_IK_SCALE * Speed);
         y_tmp = max(y_tmp, Y_MIN);
         arm_move = true;
         
-        if (y_tmp == Y_MIN) {
-            // Provide audible feedback of reaching limit
+        if (y_tmp == Y_MIN)
+        {   // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 
     // Z Position (in mm)
     // Must be positive. Servo range checking in IK code
-    if (Ps2x.Button(PSB_R1) || Ps2x.Button(PSB_R2)) {
-        if (Ps2x.Button(PSB_R1)) {
-            z_tmp += Z_INCREMENT * Speed;   // up
-        } else {
-            z_tmp -= Z_INCREMENT * Speed;   // down
+    if (Ps2x.Button(PSB_R1) || Ps2x.Button(PSB_R2))
+    {
+        if (Ps2x.Button(PSB_R1))
+        {   // up
+            z_tmp += Z_INCREMENT * Speed;
+        } else
+        {   // down
+            z_tmp -= Z_INCREMENT * Speed;
         }
         z_tmp = max(z_tmp, 0);
         arm_move = true;
@@ -344,40 +368,48 @@ void loop()
 
     // Gripper angle (in degrees) relative to horizontal
     // Can be positive or negative. Servo range checking in IK code
-    if (abs(ly_trans) > JS_DEADBAND) {
+    if (abs(ly_trans) > JS_DEADBAND)
+    {
         ga_tmp -= ((float)ly_trans / JS_SCALE * Speed);
         arm_move = true;
     }
 
     // Gripper jaw position (in degrees - determines width of jaw opening)
     // Restrict to MIN/MAX range of servo
-    if (Ps2x.Button(PSB_L1) || Ps2x.Button(PSB_L2)) {
-        if (Ps2x.Button(PSB_L1)) {
-            G += G_INCREMENT;   // close
-        } else {
-            G -= G_INCREMENT;   // open
+    if (Ps2x.Button(PSB_L1) || Ps2x.Button(PSB_L2))
+    {
+        if (Ps2x.Button(PSB_L1)) 
+        {   // close
+            G += G_INCREMENT;
+        } else
+        {   // open
+            G -= G_INCREMENT;
         }
         G = constrain(G, GRI_MIN, GRI_MAX);
         Gri_Servo.writeMicroseconds(deg_to_us(G));
 
-        if (G == GRI_MIN || G == GRI_MAX) {
-            // Provide audible feedback of reaching limit
+        if (G == GRI_MIN || G == GRI_MAX)
+        {   // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 
     // Fully open gripper
-    if (Ps2x.ButtonPressed(PSB_BLUE)) {
+    if (Ps2x.ButtonPressed(PSB_BLUE))
+    {
         G = GRI_MIN;
         Gri_Servo.writeMicroseconds(deg_to_us(G));
     }
     
     // Speed increase/decrease
-    if (Ps2x.ButtonPressed(PSB_PAD_UP) || Ps2x.ButtonPressed(PSB_PAD_DOWN)) {
-        if (Ps2x.ButtonPressed(PSB_PAD_UP)) {
-            Speed += SPEED_INCREMENT;   // increase speed
-        } else {
-            Speed -= SPEED_INCREMENT;   // decrease speed
+    if (Ps2x.ButtonPressed(PSB_PAD_UP) || Ps2x.ButtonPressed(PSB_PAD_DOWN))
+    {
+        if (Ps2x.ButtonPressed(PSB_PAD_UP))
+        {   // increase speed
+            Speed += SPEED_INCREMENT;
+        } else
+        {   // decrease speed
+            Speed -= SPEED_INCREMENT;
         }
         // Constrain to limits
         Speed = constrain(Speed, SPEED_MIN, SPEED_MAX);
@@ -389,41 +421,43 @@ void loop()
 #ifdef WRIST_ROTATE
     // Wrist rotate (in degrees)
     // Restrict to MIN/MAX range of servo
-    if (abs(lx_trans) > JS_DEADBAND) {
+    if (abs(lx_trans) > JS_DEADBAND)
+    {
         WR += ((float)lx_trans / JS_SCALE * Speed);
         WR = constrain(WR, WRO_MIN, WRO_MAX);
         Wro_Servo.writeMicroseconds(deg_to_us(WR));
 
-        if (WR == WRO_MIN || WR == WRO_MAX) {
-            // Provide audible feedback of reaching limit
+        if (WR == WRO_MIN || WR == WRO_MAX)
+        {   // Provide audible feedback of reaching limit
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
     }
 #endif
 
     // Only perform IK calculations if arm motion is needed.
-    if (arm_move) {
+    if (arm_move)
+    {
 #ifdef CYL_IK   // 2D kinematics
-        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
-            // If the arm was positioned successfully, record
+        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS)
+        {   // If the arm was positioned successfully, record
             // the new values. Otherwise, ignore them.
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        } else {
-            // Sound tone for audible feedback of error
+        } else
+        {   // Sound tone for audible feedback of error
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
 #else           // 3D kinematics
-        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
-            // If the arm was positioned successfully, record
+        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS)
+        {   // If the arm was positioned successfully, record
             // the new values. Otherwise, ignore them.
             X = x_tmp;
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
-        } else {
-            // Sound tone for audible feedback of error
+        } else
+        {   // Sound tone for audible feedback of error
             tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
         }
 #endif
@@ -554,12 +588,6 @@ void servo_park()
     Wro_Servo.writeMicroseconds(deg_to_us(PARK_WR));
 #endif
 
-// Proposed Ready-To-Run position
-// X = 45 deg
-// Y = 125 mm
-// Z = 25 mm
-// GA = -90 deg
-
     return;
 } // end servo_park()
 
@@ -608,16 +636,18 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
     
     boolean done = false;
     
-    while (!done) {
-
+    while (!done)
+    {
 #ifdef CYL_IK   // 2D kinematics
         // Determine the delta
         float ba_delta = ba_target - BA;
 
         // Move the max amount per iteration
-        if (ba_delta && abs(ba_delta) > MAX_ANGULAR_DELTA) {
+        if (ba_delta && abs(ba_delta) > MAX_ANGULAR_DELTA)
+        {
             ba_tmp += (ba_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
-        } else {
+        } else
+        {
             ba_tmp += ba_delta;
         }
 #else           // 3d kinematics
@@ -625,9 +655,11 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         float x_delta = x_target - X;
         
         // Move the max amount per iteration
-        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA) {
+        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA)
+        {
             x_tmp += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
-        } else {
+        } else
+        {
             x_tmp += x_delta;
         }
 #endif
@@ -637,23 +669,29 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         float ga_delta = ga_target - GA;
     
         // Move the max amount per iteration
-        if (y_delta && abs(y_delta) > MAX_LINEAR_DELTA) {
+        if (y_delta && abs(y_delta) > MAX_LINEAR_DELTA)
+        {
             y_tmp += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
-        } else {
+        } else
+        {
             y_tmp += y_delta;
         }
 
         // Move the max amount per iteration
-        if (z_delta && abs(z_delta) > MAX_LINEAR_DELTA) {
+        if (z_delta && abs(z_delta) > MAX_LINEAR_DELTA)
+        {
             z_tmp += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
-        } else {
+        } else
+        {
             z_tmp += z_delta;
         }
 
         // Move the max amount per iteration
-        if (ga_delta && abs(ga_delta) > MAX_ANGULAR_DELTA) {
+        if (ga_delta && abs(ga_delta) > MAX_ANGULAR_DELTA)
+        {
             ga_tmp += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
-        } else {
+        } else
+        {
             ga_tmp += ga_delta;
         }
         
@@ -662,16 +700,16 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         BA = constrain(ba_tmp, BAS_MIN, BAS_MAX);
         Bas_Servo.writeMicroseconds(deg_to_us(BA));
 
-        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
-            // If the arm was positioned successfully, record
+        if (set_arm(0, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS)
+        {   // If the arm was positioned successfully, record
             // the new values. Otherwise, ignore them.
             Y = y_tmp;
             Z = z_tmp;
             GA = ga_tmp;
         }
 #else           // 3d kinematics
-        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) {
-            // If the arm was positioned successfully, record
+        if (set_arm(x_tmp, y_tmp, z_tmp, ga_tmp) == IK_SUCCESS) 
+        {   // If the arm was positioned successfully, record
             // the new values. Otherwise, ignore them.
             X = x_tmp;
             Y = y_tmp;
@@ -684,11 +722,13 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
 
         // If target position, we're done
 #ifdef CYL_IK   // 2D kinematics
-        if ((BA == ba_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) {
+        if ((BA == ba_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) 
+        {
             done = true;
         }
 #else           // 3d kinematics
-        if ((X == x_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) {
+        if ((X == x_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target))
+        {
             done = true;
         }
 #endif
