@@ -292,17 +292,22 @@ void loop()
     {
         if (Ps2x.ButtonPressed(PSB_START))
         {    // Ready-To-Run position
-            move_arm_to(45, 125, 25, 0);
+            move_arm_to(45.0, 170.0, 45.0, 0.0);
         }
         else if (Ps2x.ButtonPressed(PSB_PINK))
         {    // West goal
+            move_arm_to(35.0, 380.0, 210.0, 0.0);
         }
         else if (Ps2x.ButtonPressed(PSB_GREEN))
         {   // North goal
+            move_arm_to(90.0, 475.0, 210.0, 0.0);
         }
         else
         {   // East goal
+            move_arm_to(145.0, 380.0, 210.0, 00.0);
         }
+        
+        return;
     }
 
     // Read the left and right joysticks and translate the 
@@ -616,7 +621,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
 // Max linear movement, in mm
 #define MAX_LINEAR_DELTA 10.0
 // Max angular movement, in degrees
-#define MAX_ANGULAR_DELTA 2.0
+#define MAX_ANGULAR_DELTA 3.0
 
 // Move the arm from its current position to a target (*_t) position
 // Stage the movement so that whiplash does not occur from moving too rapidly,
@@ -643,7 +648,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         float ba_delta = ba_target - BA;
 
         // Move the max amount per iteration
-        if (ba_delta && abs(ba_delta) > MAX_ANGULAR_DELTA)
+        if (ba_delta && abs(ba_delta) >= MAX_ANGULAR_DELTA)
         {
             ba_tmp += (ba_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
         } else
@@ -655,7 +660,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         float x_delta = x_target - X;
         
         // Move the max amount per iteration
-        if (x_delta && abs(x_delta) > MAX_LINEAR_DELTA)
+        if (x_delta && abs(x_delta) >= MAX_LINEAR_DELTA)
         {
             x_tmp += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
@@ -669,7 +674,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         float ga_delta = ga_target - GA;
     
         // Move the max amount per iteration
-        if (y_delta && abs(y_delta) > MAX_LINEAR_DELTA)
+        if (y_delta && abs(y_delta) >= MAX_LINEAR_DELTA)
         {
             y_tmp += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
@@ -678,7 +683,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         }
 
         // Move the max amount per iteration
-        if (z_delta && abs(z_delta) > MAX_LINEAR_DELTA)
+        if (z_delta && abs(z_delta) >= MAX_LINEAR_DELTA)
         {
             z_tmp += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
@@ -687,7 +692,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         }
 
         // Move the max amount per iteration
-        if (ga_delta && abs(ga_delta) > MAX_ANGULAR_DELTA)
+        if (ga_delta && abs(ga_delta) >= MAX_ANGULAR_DELTA)
         {
             ga_tmp += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
         } else
@@ -718,7 +723,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         }
 #endif
         
-        delay(10);
+        delay(40);
 
         // If target position, we're done
 #ifdef CYL_IK   // 2D kinematics
