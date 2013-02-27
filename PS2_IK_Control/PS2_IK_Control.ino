@@ -643,6 +643,10 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
     
     while (!done)
     {
+        // Read controller to satisfy internal timers and prevent reset.
+        // Results are not used in this function.
+        Ps2x.read_gamepad();
+    
 #ifdef CYL_IK   // 2D kinematics
         // Determine the delta
         float ba_delta = ba_target - BA;
@@ -650,7 +654,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         // Move the max amount per iteration
         if (ba_delta && abs(ba_delta) >= MAX_ANGULAR_DELTA)
         {
-            ba_tmp += (ba_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
+            ba_tmp += (ba_delta > 0.0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
         } else
         {
             ba_tmp += ba_delta;
@@ -662,7 +666,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         // Move the max amount per iteration
         if (x_delta && abs(x_delta) >= MAX_LINEAR_DELTA)
         {
-            x_tmp += (x_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            x_tmp += (x_delta > 0.0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
         {
             x_tmp += x_delta;
@@ -676,7 +680,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         // Move the max amount per iteration
         if (y_delta && abs(y_delta) >= MAX_LINEAR_DELTA)
         {
-            y_tmp += (y_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            y_tmp += (y_delta > 0.0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
         {
             y_tmp += y_delta;
@@ -685,7 +689,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         // Move the max amount per iteration
         if (z_delta && abs(z_delta) >= MAX_LINEAR_DELTA)
         {
-            z_tmp += (z_delta > 0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            z_tmp += (z_delta > 0.0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
         } else
         {
             z_tmp += z_delta;
@@ -694,7 +698,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         // Move the max amount per iteration
         if (ga_delta && abs(ga_delta) >= MAX_ANGULAR_DELTA)
         {
-            ga_tmp += (ga_delta > 0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
+            ga_tmp += (ga_delta > 0.0) ? MAX_ANGULAR_DELTA : -MAX_ANGULAR_DELTA;
         } else
         {
             ga_tmp += ga_delta;
