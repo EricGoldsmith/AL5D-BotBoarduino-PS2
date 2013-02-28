@@ -37,9 +37,8 @@
 *       0.4 Added control to modify speed of movement during program run
 *       0.5 Write to servos directly in microseconds to improve resolution
 *           Should be accurate to ~1/2 a degree
+*       0.6 Added ability to move arm to pre-defined hotspots with button press
 *
-*    To Do
-*    - Improve arm parking logic to gently move to park position
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
