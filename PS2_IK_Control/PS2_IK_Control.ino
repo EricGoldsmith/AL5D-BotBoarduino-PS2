@@ -73,7 +73,8 @@ int dummy;                  // Defining this dummy variable to work around a bug
 #define BASE_HGT 80.9625    // Base height to X/Y plane 3.1875"
 #define HUMERUS 263.525     // Shoulder-to-elbow "bone" 10.375"
 #define ULNA 325.4375       // Elbow-to-wrist "bone" 12.8125"
-#define GRIPPER 73.025      // Gripper length, to middle of grip surface 2.875" (3.375" - 0.5")
+//#define GRIPPER 73.025      // Gripper length, to middle of grip surface 2.875" (3.375" - 0.5")
+#define GRIPPER 70.0      // Gripper length, to middle of grip surface 2.875" (3.375" - 0.5")
 
 // Arduino pin numbers for servo connections
 #define BAS_SERVO_PIN 2     // Base servo HS-485HB
@@ -296,15 +297,16 @@ void loop()
         }
         else if (Ps2x.ButtonPressed(PSB_PINK))
         {    // West goal
-            move_arm_to(35.0, 380.0, 210.0, 0.0);
+            move_arm_to(35.0, 380.0, 250.0, 0.0);
         }
         else if (Ps2x.ButtonPressed(PSB_GREEN))
         {   // North goal
-            move_arm_to(90.0, 475.0, 210.0, 0.0);
+            // Higher z value to compensate for arm droop at that y value
+            move_arm_to(90.0, 475.0, 275.0, 0.0);
         }
         else
         {   // East goal
-            move_arm_to(145.0, 380.0, 210.0, 00.0);
+            move_arm_to(145.0, 380.0, 250.0, 00.0);
         }
         
         return;
@@ -687,9 +689,10 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         }
 
         // Move the max amount per iteration
-        if (z_delta && abs(z_delta) >= MAX_LINEAR_DELTA)
+        // Give z direction more weight (2x)
+        if (z_delta && abs(z_delta) >= (2*MAX_LINEAR_DELTA))
         {
-            z_tmp += (z_delta > 0.0) ? MAX_LINEAR_DELTA : -MAX_LINEAR_DELTA;
+            z_tmp += (z_delta > 0.0) ? (2*MAX_LINEAR_DELTA) : -(2*MAX_LINEAR_DELTA);
         } else
         {
             z_tmp += z_delta;
