@@ -24,6 +24,10 @@
 *       L1/L2 Buttons:      Gripper close/open
 *       X Button:           Gripper fully open
 *       Digital Pad U/D:    Speed increase/decrease
+*       Start Button:       Hotspot #1
+*       Square Button:      Hotspot #2
+*       Triangle Button:    Hotspot #3
+*       Circle Button:      Hotspot #4
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
@@ -288,23 +292,24 @@ void loop()
 
     Ps2x.read_gamepad();        //read controller
     
-    //If one of the 'hot-spot' buttons was pressed move the arm there
-    if (Ps2x.ButtonPressed(PSB_START) || Ps2x.ButtonPressed(PSB_RED) || Ps2x.ButtonPressed(PSB_PINK) || Ps2x.ButtonPressed(PSB_GREEN))
+    //If one of the 'hotspot' buttons was pressed move the arm there
+    if (Ps2x.ButtonPressed(PSB_START) || Ps2x.ButtonPressed(PSB_CIRCLE) ||
+        Ps2x.ButtonPressed(PSB_SQUARE) || Ps2x.ButtonPressed(PSB_TRIANGLE))
     {
-        if (Ps2x.ButtonPressed(PSB_START))
+        if (Ps2x.ButtonPressed(PSB_START))          // Hotspot #1
         {    // Ready-To-Run position
             move_arm_to(45.0, 170.0, 45.0, 0.0);
         }
-        else if (Ps2x.ButtonPressed(PSB_PINK))
+        else if (Ps2x.ButtonPressed(PSB_SQUARE))    // Hotspot #2
         {    // West goal
             move_arm_to(35.0, 380.0, 250.0, 0.0);
         }
-        else if (Ps2x.ButtonPressed(PSB_GREEN))
+        else if (Ps2x.ButtonPressed(PSB_TRIANGLE))  // Hotspot #3
         {   // North goal
             // Higher z value to compensate for arm droop at that y value
             move_arm_to(90.0, 475.0, 275.0, 0.0);
         }
-        else
+        else                                        // Hotspot #4
         {   // East goal
             move_arm_to(145.0, 380.0, 250.0, 00.0);
         }
@@ -402,7 +407,7 @@ void loop()
     }
 
     // Fully open gripper
-    if (Ps2x.ButtonPressed(PSB_BLUE))
+    if (Ps2x.ButtonPressed(PSB_CROSS))
     {
         G = GRI_MIN;
         Gri_Servo.writeMicroseconds(deg_to_us(G));

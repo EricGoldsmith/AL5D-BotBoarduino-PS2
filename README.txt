@@ -24,6 +24,10 @@
 *       L1/L2 Buttons:      Gripper close/open
 *       X Button:           Gripper fully open
 *       Digital Pad U/D:    Speed increase/decrease
+*       Start Button:       Hotspot #1
+*       Square Button:      Hotspot #2
+*       Triangle Button:    Hotspot #3
+*       Circle Button:      Hotspot #4
 *
 *   Eric Goldsmith
 *   www.ericgoldsmith.com
