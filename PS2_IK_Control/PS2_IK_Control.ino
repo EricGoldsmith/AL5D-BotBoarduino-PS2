@@ -1,60 +1,60 @@
 /******************************************************************
-*   Inverse Kinematics code to control a (modified) 
-*   LynxMotion AL5D robot arm using a PS2 controller.
-*
-*   Original IK code by Oleg Mazurov:
-*       www.circuitsathome.com/mcu/robotic-arm-inverse-kinematics-on-arduino
-*
-*   Great intro to IK, with illustrations:
-*       github.com/EricGoldsmith/AL5D-BotBoarduino-PS2/blob/master/Robot_Arm_IK.pdf
-*
-*   Revamped to use BotBoarduino microcontroller:
-*       www.lynxmotion.com/c-153-botboarduino.aspx
-*   Arduino Servo library:
-*       arduino.cc/en/Reference/Servo
-*   and PS2X controller library:
-*       github.com/madsci1016/Arduino-PS2X
-*
-*   PS2 Controls
-*       Right Joystick L/R: Gripper tip X position (side to side)
-*       Right Joystick U/D: Gripper tip Y position (distance out from base center)
-*       R1/R2 Buttons:      Gripper tip Z position (height from surface)
-*       Left  Joystick L/R: Wrist rotate (if installed)
-*       Left  Joystick U/D: Wrist angle
-*       L1/L2 Buttons:      Gripper close/open
-*       X Button:           Gripper fully open
-*       Digital Pad U/D:    Speed increase/decrease
-*       Start Button:       Hotspot #1
-*       Square Button:      Hotspot #2
-*       Triangle Button:    Hotspot #3
-*       Circle Button:      Hotspot #4
-*
-*   Eric Goldsmith
-*   www.ericgoldsmith.com
-*
-*   Current Version:
-*       https://github.com/EricGoldsmith/AL5D-BotBoarduino-PS2
-*   Version history
-*       0.1 Initial port of code to use Arduino Server Library
-*       0.2 Added PS2 controls
-*       0.3 Added constraint logic & 2D kinematics
-*       0.4 Added control to modify speed of movement during program run
-*       0.5 Write to servos directly in microseconds to improve resolution
-*           Should be accurate to ~1/2 a degree
-*       0.6 Added ability to move arm to pre-defined hotspots with button press
-*
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-* <http://www.gnu.org/licenses/>
-* 
-******************************************************************/
+ *   Inverse Kinematics code to control a (modified) 
+ *   LynxMotion AL5D robot arm using a PS2 controller.
+ *
+ *   Original IK code by Oleg Mazurov:
+ *       www.circuitsathome.com/mcu/robotic-arm-inverse-kinematics-on-arduino
+ *
+ *   Great intro to IK, with illustrations:
+ *       github.com/EricGoldsmith/AL5D-BotBoarduino-PS2/blob/master/Robot_Arm_IK.pdf
+ *
+ *   Revamped to use BotBoarduino microcontroller:
+ *       www.lynxmotion.com/c-153-botboarduino.aspx
+ *   Arduino Servo library:
+ *       arduino.cc/en/Reference/Servo
+ *   and PS2X controller library:
+ *       github.com/madsci1016/Arduino-PS2X
+ *
+ *   PS2 Controls
+ *       Right Joystick L/R: Gripper tip X position (side to side)
+ *       Right Joystick U/D: Gripper tip Y position (distance out from base center)
+ *       R1/R2 Buttons:      Gripper tip Z position (height from surface)
+ *       Left  Joystick L/R: Wrist rotate (if installed)
+ *       Left  Joystick U/D: Wrist angle
+ *       L1/L2 Buttons:      Gripper close/open
+ *       X Button:           Gripper fully open
+ *       Digital Pad U/D:    Speed increase/decrease
+ *       Start Button:       Hotspot #1
+ *       Square Button:      Hotspot #2
+ *       Triangle Button:    Hotspot #3
+ *       Circle Button:      Hotspot #4
+ *
+ *   Eric Goldsmith
+ *   www.ericgoldsmith.com
+ *
+ *   Current Version:
+ *       https://github.com/EricGoldsmith/AL5D-BotBoarduino-PS2
+ *   Version history
+ *       0.1 Initial port of code to use Arduino Server Library
+ *       0.2 Added PS2 controls
+ *       0.3 Added constraint logic & 2D kinematics
+ *       0.4 Added control to modify speed of movement during program run
+ *       0.5 Write to servos directly in microseconds to improve resolution
+ *           Should be accurate to ~1/2 a degree
+ *       0.6 Added ability to move arm to pre-defined hotspots with button press
+ *
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * <http://www.gnu.org/licenses/>
+ * 
+ ******************************************************************/
 
 #include <Servo.h>
 #include <PS2X_lib.h>
@@ -146,6 +146,11 @@ int dummy;                  // Defining this dummy variable to work around a bug
 #define SPEED_DEFAULT 1.0
 #define SPEED_INCREMENT 0.25
 
+// Constraints for automated arm movement, used by move_arm_to()
+#define MAX_LINEAR_DELTA 10.0   // Max linear movement, in mm
+#define MAX_ANGULAR_DELTA 3.0   // Max angular movement, in degrees
+#define MAX_NUM_MOVES 100       // Max number of moves - used as failsafe
+
 // Practical navigation limit.
 // Enforced on controller input, and used for CLV calculation 
 // for base rotation in 2D mode. 
@@ -217,7 +222,10 @@ Servo   Gri_Servo;
 #ifdef WRIST_ROTATE
  Servo   Wro_Servo;
 #endif
- 
+
+/*
+ * Setup function - runs once when Arduino is powered up or reset
+ */
 void setup()
 {
 #ifdef DEBUG
@@ -274,7 +282,10 @@ void setup()
     tone(SPK_PIN, TONE_READY, TONE_DURATION);
 
 } // end setup()
- 
+
+/*
+ * Loop function - runs forever, after setup() function
+ */
 void loop()
 {
     // Store desired position in tmp variables until confirmed by set_arm() logic
@@ -314,6 +325,7 @@ void loop()
             move_arm_to(145.0, 380.0, 250.0, 00.0);
         }
         
+        // Jump out of the loop(), so no more commands are processed on this iteration
         return;
     }
 
@@ -478,13 +490,17 @@ void loop()
         arm_move = false;
     }
 
+    // Give the servos time to move
     delay(10);
  } // end loop()
  
-// Arm positioning routine utilizing Inverse Kinematics.
-// Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive.
-// Input dimensions are for the gripper, just short of its tip, where it grabs things.
-// If resulting arm position is physically unreachable, return error code.
+
+/*
+ * Arm positioning routine utilizing Inverse Kinematics.
+ * Z is height, Y is distance from base center out, X is side to side. Y, Z can only be positive.
+ * Input dimensions are for the gripper, just short of its tip, where it grabs things.
+ * If resulting arm position is physically unreachable, return error code.
+ */
 int set_arm(float x, float y, float z, float grip_angle_d)
 {
     //grip angle in radians for use in calculations
@@ -585,8 +601,10 @@ int set_arm(float x, float y, float z, float grip_angle_d)
 
     return IK_SUCCESS;
 } // end set_arm()
- 
-// Move servos to parking position
+
+/* 
+ * Move servos to parking position
+ */
 void servo_park()
 {
 #ifdef CYL_IK   // 2D kinematics
@@ -603,12 +621,14 @@ void servo_park()
     return;
 } // end servo_park()
 
-// The Arduino Servo library .write() function accepts 'int' degrees, meaning
-// maximum servo positioning resolution is whole degrees. Servos are capable 
-// of roughly 2x that resolution via direct microsecond control.
-//
-// This function converts 'float' (i.e. decimal) degrees to corresponding 
-// servo microseconds to take advantage of this extra resolution.
+/* 
+ * The Arduino Servo library .write() function accepts 'int' degrees, meaning
+ * maximum servo positioning resolution is whole degrees. Servos are capable 
+ * of roughly 2x that resolution via direct microsecond control.
+ *
+ * This function converts 'float' (i.e. decimal) degrees to corresponding 
+ * servo microseconds to take advantage of this extra resolution.
+ */
 int deg_to_us(float value)
 {
     // Apply basic constraints
@@ -619,20 +639,19 @@ int deg_to_us(float value)
     return(round(map_float(value, SERVO_MIN_DEG, SERVO_MAX_DEG, (float)SERVO_MIN_US, (float)SERVO_MAX_US)));      
 } // end deg_to_us()
 
-// Same logic as native map() function, just operates on float instead of long
+/*
+ * Same logic as native map() function, just operates on float instead of long
+ */
 float map_float(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return ((x - in_min) * (out_max - out_min) / (in_max - in_min)) + out_min;
 } // end map_float()
 
-// Max linear movement, in mm
-#define MAX_LINEAR_DELTA 10.0
-// Max angular movement, in degrees
-#define MAX_ANGULAR_DELTA 3.0
-
-// Move the arm from its current position to a target (*_t) position
-// Stage the movement so that whiplash does not occur from moving too rapidly,
-// and no joint or position limits are exceeded.
+/*
+ * Move the arm from its current position to a target (*_t) position
+ * Stage the movement so that whiplash does not occur from moving too rapidly,
+ * and no joint or position limits are exceeded.
+ */
 #ifdef CYL_IK   // 2D kinematics
  void move_arm_to(float ba_target, float y_target, float z_target, float ga_target)
  {
@@ -646,9 +665,11 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
     float z_tmp = Z;
     float ga_tmp = GA;
     
-    boolean done = false;
+    boolean reached_target = false;
+    int num_moves = 0;
     
-    while (!done)
+    // Move the arm while we haven't reached the target and haven't exceeded the maximum number of moves
+    while (!reached_target && (num_moves < MAX_NUM_MOVES))
     {
         // Read controller to satisfy internal timers and prevent reset.
         // Results are not used in this function.
@@ -735,19 +756,33 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
         }
 #endif
         
-        delay(40);
-
-        // If target position, we're done
+        // If we reached target position, we're done
 #ifdef CYL_IK   // 2D kinematics
         if ((BA == ba_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target)) 
         {
-            done = true;
+            reached_target = true;
         }
 #else           // 3d kinematics
         if ((X == x_target) && (Y == y_target) && (Z == z_target) && (GA == ga_target))
         {
-            done = true;
+            reached_target = true;
         }
 #endif
-    } // end while (!done)
+
+        num_moves++;
+
+        // Give the servos time to move
+        delay(40);
+
+    } // end while (!reached_target && (num_moves < MAX_NUM_MOVES))
+    
+    // If we reached the maximum number of moves, but didn't reach the target position,
+    // send audible feedback.
+    if ((num_moves == MAX_NUM_MOVES) && !reached_target)
+    {
+        tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
+        delay(TONE_DURATION * 2);
+        tone(SPK_PIN, TONE_RANGE_ERROR, TONE_DURATION);
+    }
+    
 } // end move_arm_to()
