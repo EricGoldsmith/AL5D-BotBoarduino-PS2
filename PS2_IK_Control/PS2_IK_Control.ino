@@ -149,7 +149,7 @@ int dummy;                  // Defining this dummy variable to work around a bug
 // Constraints for automated arm movement, used by move_arm_to()
 #define MAX_LINEAR_DELTA 10.0   // Max linear movement, in mm
 #define MAX_ANGULAR_DELTA 3.0   // Max angular movement, in degrees
-#define MAX_NUM_MOVES 100       // Max number of moves - used as failsafe
+#define MAX_NUM_MOVES 50        // Max number of moves - used as failsafe
 
 // Practical navigation limit.
 // Enforced on controller input, and used for CLV calculation 
